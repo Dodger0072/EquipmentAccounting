@@ -1,0 +1,70 @@
+{
+  "name": "equipment_accounting_web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview",
+    "prepare": "husky install",
+    "start": "react-scripts start"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.24.0",
+    "@bem-react/classname": "^1.6.0",
+    "@consta/icons": "^1.1.0",
+    "@consta/uikit": "^5.1.0",
+    "@stitches/react": "^1.2.8",
+    "axios": "^1.7.7",
+    "braces": "^3.0.3",
+    "compute-scroll-into-view": "^1.0.17",
+    "effector": "^22.8.8",
+    "effector-forms": "^1.3.4",
+    "effector-react": "^22.5.4",
+    "install": "^0.13.0",
+    "leaflet": "^1.9.4",
+    "npm": "^10.8.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1",
+    "react-map-interaction": "^2.1.0",
+    "react-router-dom": "^6.22.2",
+    "react-scripts": "^5.0.1",
+    "react-textarea-autosize": "^8.5.3",
+    "react-transition-group": "^4.4.5"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.24.0",
+    "@trivago/prettier-plugin-sort-imports": "^4.3.0",
+    "@types/node": "^20.11.24",
+    "@types/react": "^18.2.56",
+    "@types/react-dom": "^18.2.19",
+    "@typescript-eslint/eslint-plugin": "^7.0.2",
+    "@typescript-eslint/parser": "^7.0.2",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "husky": "^8.0.0",
+    "prettier": "^3.2.5",
+    "typescript": "^4.9.5",
+    "vite": "^5.4.8",
+    "vite-plugin-externalize-deps": "^0.8.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
