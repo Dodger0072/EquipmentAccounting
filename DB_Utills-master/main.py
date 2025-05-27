@@ -32,7 +32,7 @@ async def test(session: AsyncSession):
         softwareEndDate=datetime.now().date(),
         manufacturer="Test Manufacturer",
         xCord=0.0,
-        yCoord=0.0,
+        yCord=0.0,
         waveRadius=1.0
     )
     test_device1 = device(
@@ -45,7 +45,7 @@ async def test(session: AsyncSession):
         softwareEndDate=datetime.now().date(),
         manufacturer="Test Manufacturer1",
         xCord=2.0,
-        yCoord=2.0,
+        yCord=2.0,
         waveRadius=2.0
     )
     test_place = place(name="Test Place1")

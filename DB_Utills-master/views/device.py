@@ -19,7 +19,7 @@ class DeviceAdmin(ModelView, model=device):
         device.softwareEndDate,
         device.manufacturer,
         device.xCord,
-        device.yCoord,
+        device.yCord,
         device.waveRadius
     ]
     form_include_pk = True
@@ -34,7 +34,7 @@ class DeviceAdmin(ModelView, model=device):
         device.softwareEndDate,
         device.manufacturer,
         device.xCord,
-        device.yCoord,
+        device.yCord,
         device.waveRadius
     ]
 

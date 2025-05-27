@@ -1,27 +1,28 @@
 import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, Sequence
-from sqlalchemy import Integer, String, Date, Float, ForeignKey, update, select, delete
+from sqlalchemy import Integer, String, Column, Float, ForeignKey, update, select, delete
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.declarative import declarative_base
-from models.db_session import Base
+from models.db_session_sync import Base
 
 
 class device(Base):
-    __tablename__ = 'devices'
+    __tablename__ = 'device'
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String)
-    category: Mapped[str] = mapped_column(String)
-    place_id: Mapped[int] = mapped_column(ForeignKey("places.id"))  # Внешний ключ на таблицу мест
-    version: Mapped[str] = mapped_column(String)
-    releaseDate: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.now)
-    softwareStartDate: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.now)
-    softwareEndDate: Mapped[datetime.datetime] = mapped_column(default=datetime.datetime.now)
-    manufacturer: Mapped[str] = mapped_column(String)
-    xCord: Mapped[float] = mapped_column(Float)
-    yCoord: Mapped[float] = mapped_column(Float)
-    waveRadius: Mapped[float] = mapped_column(Float)
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    category = Column(String)
+    place_id = Column(String)
+    version = Column(String)
+    releaseDate = Column(String)  # или Date, если PostgreSQL
+    softwareStartDate = Column(String)
+    softwareEndDate = Column(String)
+    manufacturer = Column(String)
+    xCord = Column(Float)
+    yCord = Column(Float)
+    waveRadius = Column(Float)
+    mapId = Column(Integer)
 
     # answers: Mapped[list[Answer]] = relationship(lazy="selectin")
 

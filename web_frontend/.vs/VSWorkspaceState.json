@@ -1,0 +1,17 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\src",
+    "\\src\\features",
+    "\\src\\features\\equipment",
+    "\\src\\features\\equipment\\model",
+    "\\src\\pages",
+    "\\src\\pages\\equipment",
+    "\\src\\widgets",
+    "\\src\\widgets\\equipment-list",
+    "\\src\\widgets\\equipment-list\\ui",
+    "\\src\\widgets\\equipment-list\\ui\\atoms"
+  ],
+  "SelectedNode": "\\src\\widgets\\equipment-list\\ui\\organisms\\euipment-popup.tsx",
+  "PreviewInSolutionExplorer": false
+}

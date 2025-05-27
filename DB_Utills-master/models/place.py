@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, String, update, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.declarative import declarative_base
-from models.db_session import Base
+from models.db_session_sync import Base
 
 
 class place(Base):
