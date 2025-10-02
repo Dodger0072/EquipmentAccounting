@@ -4,65 +4,79 @@ import { Equipment } from '@/shared/types';
 import { SelectItem } from '@/shared/types/select-item';
 import { createEvent, createStore, createEffect } from 'effector';
 import axios from 'axios';
-import { updateEquipmentFx } from '@/features/equipment/model/updateEquipmentFx'; // <-- Импортируем эффект обновления
+import { updateEquipmentFx, UpdateEquipmentParams } from '@/features/equipment/model/updateEquipmentFx';
 
+// События
 export const addEquipment = createEvent<Equipment>();
 export const setFilter = createEvent<SelectItem>();
 export const deleteEquipment = createEvent<number>();
+export const updateEquipment = createEvent<UpdateEquipmentParams>();
 
+// Эффекты
 export const fetchEquipmentFx = createEffect(async () => {
     const response = await axios.get('http://localhost:8000/search');
-    return response.data.devices; // Убедитесь, что ваш бэкенд возвращает список в поле 'devices'
+    return response.data.devices;
 });
 
-export const updateEquipment = createEvent<Equipment>(); // Это событие для оптимистичного обновления (опционально)
+export const fetchCategoriesFx = createEffect(async () => {
+    const response = await axios.get('http://localhost:8000/categories');
+    return response.data;
+});
 
+// Сторы
 const items: SelectItem[] = [
     { label: 'Все', id: 1, value: 'all' },
     { label: 'Устаревающие', id: 2, value: 'outdated-soon' },
     { label: 'Устаревшие', id: 3, value: 'outdated' },
 ];
 
-// Добавляем эффект для загрузки категорий
-export const fetchCategoriesFx = createEffect(async () => {
-    const response = await axios.get('http://localhost:8000/categories');
-    return response.data;
-});
-
-// Стор для категорий оборудования
 export const $equipmentCategories = createStore<any[]>([])
     .on(fetchCategoriesFx.doneData, (_, categories) => categories);
 
 export const $items = createStore<Equipment[]>([])
-    .on(
-        addEquipment,
-        (state, newItem) => [...state, newItem]
-    )
-    .on(
-        fetchEquipmentFx.doneData, (_, items) => items // Обновляем стор данными из fetch
-    )
-    .on(
-        deleteEquipment, (state, id) => state.filter(item => item.id !== id)
-    )
-    .on(
-        updateEquipment, (state, updatedItem) => // Это для оптимистичного обновления (сразу после отправки, до ответа сервера)
-        state.map(item => (item.id === updatedItem.id ? updatedItem : item))
-    )
-    // --- КРИТИЧНО: ДОБАВЬТЕ ЭТОТ ОБРАБОТЧИК ДЛЯ updateEquipmentFx.doneData ---
-    .on(
-        updateEquipmentFx.doneData, (state, payload) => {
-            // Payload - это то, что вернул ваш бэкенд после PUT запроса,
-            // т.е. { message: 'Device 8 обновлён', device: { ... } }
-            const updatedDeviceFromServer = payload.device; // Предполагаем, что бэкенд возвращает объект в поле 'device'
-            if (!updatedDeviceFromServer || !updatedDeviceFromServer.id) {
-                console.error("updateEquipmentFx.doneData payload.device is undefined or missing ID. Check backend response.");
-                return state; // Возвращаем текущее состояние, если нет данных
-            }
-            return state.map(item =>
-                item.id === updatedDeviceFromServer.id ? updatedDeviceFromServer : item
-            );
+    .on(addEquipment, (state, newItem) => [...state, newItem])
+    .on(fetchEquipmentFx.doneData, (_, items) => items)
+    .on(deleteEquipment, (state, id) => state.filter(item => item.id !== id))
+    .on(updateEquipment, (state, { id, data }) => {
+        console.log('updateEquipment - optimistic update:', { id, data });
+        console.log('updateEquipment - current state before optimistic update:', state);
+        
+        const newState = state.map(item => 
+            item.id === id 
+                ? { ...item, ...data }
+                : item
+        );
+        
+        console.log('updateEquipment - new state after optimistic update:', newState);
+        return newState;
+    })
+    .on(updateEquipmentFx.doneData, (state, response) => {
+        console.log('updateEquipmentFx.doneData - response:', response);
+        const updatedDevice = response.device;
+        if (!updatedDevice || !updatedDevice.id) {
+            console.error('Invalid response from server:', response);
+            return state;
         }
-    );
+        
+        console.log('updateEquipmentFx.doneData - updating device:', updatedDevice);
+        console.log('updateEquipmentFx.doneData - current state before update:', state);
+        
+        const newState = state.map(item => {
+            if (item.id === updatedDevice.id) {
+                console.log('updateEquipmentFx.doneData - replacing item:', item, 'with:', updatedDevice);
+                return updatedDevice;
+            }
+            return item;
+        });
+        
+        console.log('updateEquipmentFx.doneData - new state after update:', newState);
+        return newState;
+    })
+    .on(updateEquipmentFx.failData, (state, error) => {
+        console.error('Equipment update failed:', error);
+        return state;
+    });
 
 export const $filterSelect = createStore<SelectItem[]>(items);
-export const $chosenFilter = createStore<SelectItem>(items[0]).on(setFilter, (_, filter) => filter);
+export const $chosenFilter = createStore<SelectItem>(items[0])
+    .on(setFilter, (_, filter) => filter);

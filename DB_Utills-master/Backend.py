@@ -1,11 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.device import device
 from models.place import place
 from models.category import category
 from models.manufacturer import manufacturer
 from models.db_session import create_session, Base
-from schemas import EquipmentCreate, CategoryCreate, CategoryUpdate, CategoryResponse, ManufacturerCreate, ManufacturerUpdate, ManufacturerResponse
+from schemas import EquipmentCreate, EquipmentUpdate, CategoryCreate, CategoryUpdate, CategoryResponse, ManufacturerCreate, ManufacturerUpdate, ManufacturerResponse
 from datetime import datetime
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,9 +32,22 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Обработчик для preflight запросов
+@app.options("/{path:path}")
+async def options_handler(request: Request, path: str):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "http://localhost:5173",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 @app.post("/add_place")
 async def add_place(place_data: dict):
@@ -88,11 +102,6 @@ async def add_device(equipment: EquipmentCreate):
         else:
             equipment_dict["yCord"] = None
             
-        if equipment_dict.get("waveRadius") is not None and equipment_dict["waveRadius"] != "":
-            equipment_dict["waveRadius"] = float(equipment_dict["waveRadius"])
-        else:
-            equipment_dict["waveRadius"] = None
-            
         if equipment_dict.get("mapId") is not None and equipment_dict["mapId"] != "":
             equipment_dict["mapId"] = int(equipment_dict["mapId"])
         else:
@@ -115,7 +124,6 @@ async def add_device(equipment: EquipmentCreate):
             "softwareEndDate": new_device.softwareEndDate.isoformat() if new_device.softwareEndDate else None,
             "updateDate": new_device.updateDate.isoformat() if new_device.updateDate else None,
             "manufacturer": new_device.manufacturer,
-            "waveRadius": new_device.waveRadius,
             "mapId": new_device.mapId,
         }}
 
@@ -141,7 +149,6 @@ async def search_devices():
                     "softwareEndDate": d.softwareEndDate.isoformat() if d.softwareEndDate else None,
                     "updateDate": d.updateDate.isoformat() if d.updateDate else None,
                     "manufacturer": d.manufacturer,
-                    "waveRadius": d.waveRadius,
                     "mapId": d.mapId,
                 } 
                 for d in devices
@@ -164,73 +171,79 @@ async def delete_device(device_id: int):
         return {"message": f"Device {device_id} deleted successfully"}
 
 @app.put("/update_device/{device_id}")
-async def update_device(device_id: int, updated_data: dict):
+async def update_device(device_id: int, updated_data: EquipmentUpdate):
+    """Обновить оборудование по ID"""
     async with create_session() as db:
-        from sqlalchemy import select, update
+        from sqlalchemy import select
+        
+        # Получаем устройство из базы данных
         result = await db.execute(select(device).where(device.id == device_id))
         db_device = result.scalar_one_or_none()
         
         if not db_device:
             raise HTTPException(status_code=404, detail="Device not found")
         
-        # Обрабатываем даты, если они присутствуют
-        processed_data = updated_data.copy()
-        if "releaseDate" in processed_data and isinstance(processed_data["releaseDate"], str):
-            processed_data["releaseDate"] = datetime.strptime(processed_data["releaseDate"], "%Y-%m-%d").date()
-        if "softwareStartDate" in processed_data and isinstance(processed_data["softwareStartDate"], str):
-            processed_data["softwareStartDate"] = datetime.strptime(processed_data["softwareStartDate"], "%Y-%m-%d").date()
-        if "softwareEndDate" in processed_data and processed_data["softwareEndDate"]:
-            if isinstance(processed_data["softwareEndDate"], str):
-                processed_data["softwareEndDate"] = datetime.strptime(processed_data["softwareEndDate"], "%Y-%m-%d").date()
-        if "updateDate" in processed_data and processed_data["updateDate"]:
-            if isinstance(processed_data["updateDate"], str):
-                processed_data["updateDate"] = datetime.strptime(processed_data["updateDate"], "%Y-%m-%d").date()
+        # Получаем только переданные поля (исключаем None)
+        update_data = updated_data.model_dump(exclude_unset=True)
+        
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No data to update")
+        
+        # Обрабатываем даты
+        for date_field in ["releaseDate", "softwareStartDate", "softwareEndDate", "updateDate"]:
+            if date_field in update_data and update_data[date_field]:
+                try:
+                    update_data[date_field] = datetime.strptime(update_data[date_field], "%Y-%m-%d").date()
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid date format for {date_field}")
+            elif date_field in update_data and update_data[date_field] is None:
+                # Явно устанавливаем None для очистки поля
+                update_data[date_field] = None
         
         # Обрабатываем числовые поля
-        if "xCord" in processed_data and processed_data["xCord"] is not None and processed_data["xCord"] != "":
-            processed_data["xCord"] = float(processed_data["xCord"])
-        elif "xCord" in processed_data:
-            processed_data["xCord"] = None
-            
-        if "yCord" in processed_data and processed_data["yCord"] is not None and processed_data["yCord"] != "":
-            processed_data["yCord"] = float(processed_data["yCord"])
-        elif "yCord" in processed_data:
-            processed_data["yCord"] = None
-            
-        if "waveRadius" in processed_data and processed_data["waveRadius"] is not None and processed_data["waveRadius"] != "":
-            processed_data["waveRadius"] = float(processed_data["waveRadius"])
-        elif "waveRadius" in processed_data:
-            processed_data["waveRadius"] = None
-            
-        if "mapId" in processed_data and processed_data["mapId"] is not None and processed_data["mapId"] != "":
-            processed_data["mapId"] = int(processed_data["mapId"])
-        elif "mapId" in processed_data:
-            processed_data["mapId"] = None
+        for num_field in ["xCord", "yCord"]:
+            if num_field in update_data and update_data[num_field] is not None:
+                try:
+                    update_data[num_field] = float(update_data[num_field])
+                except (ValueError, TypeError):
+                    raise HTTPException(status_code=400, detail=f"Invalid number format for {num_field}")
+        
+        if "mapId" in update_data and update_data["mapId"] is not None:
+            try:
+                update_data["mapId"] = int(update_data["mapId"])
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Invalid mapId format")
         
         # Обновляем поля устройства
-        for key, value in processed_data.items():
+        for key, value in update_data.items():
             if hasattr(db_device, key):
                 setattr(db_device, key, value)
         
         await db.commit()
         await db.refresh(db_device)
         
-        return {"message": f"Device {device_id} обновлён", "device": {
-            "id": db_device.id,
-            "name": db_device.name,
-            "category": db_device.category,
-            "xCord": db_device.xCord,
-            "yCord": db_device.yCord,
-            "place_id": db_device.place_id,
-            "version": db_device.version,
-            "releaseDate": db_device.releaseDate.isoformat() if db_device.releaseDate else None,
-            "softwareStartDate": db_device.softwareStartDate.isoformat() if db_device.softwareStartDate else None,
-            "softwareEndDate": db_device.softwareEndDate.isoformat() if db_device.softwareEndDate else None,
-            "updateDate": db_device.updateDate.isoformat() if db_device.updateDate else None,
-            "manufacturer": db_device.manufacturer,
-            "waveRadius": db_device.waveRadius,
-            "mapId": db_device.mapId,
-        }}
+        # Возвращаем обновленное устройство
+        response_data = {
+            "message": f"Device {device_id} updated successfully",
+            "device": {
+                "id": db_device.id,
+                "name": db_device.name,
+                "category": db_device.category,
+                "xCord": db_device.xCord,
+                "yCord": db_device.yCord,
+                "place_id": db_device.place_id,
+                "version": db_device.version,
+                "releaseDate": db_device.releaseDate.isoformat() if db_device.releaseDate else None,
+                "softwareStartDate": db_device.softwareStartDate.isoformat() if db_device.softwareStartDate else None,
+                "softwareEndDate": db_device.softwareEndDate.isoformat() if db_device.softwareEndDate else None,
+                "updateDate": db_device.updateDate.isoformat() if db_device.updateDate else None,
+                "manufacturer": db_device.manufacturer,
+                "mapId": db_device.mapId,
+            }
+        }
+        
+        print(f"API: Returning updated device data: {response_data}")
+        return response_data
 
 @app.post("/login")
 def login(credentials: dict):

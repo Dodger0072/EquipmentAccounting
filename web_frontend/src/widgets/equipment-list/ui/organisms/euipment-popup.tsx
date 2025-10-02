@@ -1,120 +1,190 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { styled } from '@stitches/react';
 import { Select } from '@consta/uikit/Select';
 import { useUnit } from 'effector-react';
-import { Equipment } from '../../../../shared/types';
+import { Equipment, EquipmentFormData } from '../../../../shared/types';
 import { $categories, fetchCategories } from '@/pages/admin/categories/model';
 import { $manufacturers, fetchManufacturers } from '@/pages/admin/manufacturers/model';
+import { InteractiveMap } from '@/widgets/map/ui/organisms';
+import { updateEquipmentFx } from '@/features/equipment/model/updateEquipmentFx';
 
 interface AddEquipmentPopupProps {
     onClose: () => void;
-    onSubmit: (data: any) => void;
+    onSubmit: (data: EquipmentFormData) => void;
     initialData?: Equipment;
 }
 
-export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ onClose, onSubmit, initialData }) => {
-    const [formData, setFormData] = useState<Equipment>(initialData || {
-        id: 0,
-        name: '',
-        category: '',
-        releaseDate: '',
-        softwareStartDate: '',
-        softwareEndDate: '',
-        updateDate: '',
-        manufacturer: '',
-        xCord: 0,
-        yCord: 0,
-        waveRadius: undefined,
-        mapId: undefined,
-        place_id: '',
-        version: '1.0',
-    });
+const defaultFormData: EquipmentFormData = {
+    name: '',
+    category: '',
+    releaseDate: '',
+    softwareStartDate: '',
+    softwareEndDate: '',
+    updateDate: '',
+    manufacturer: '',
+    xCord: 0,
+    yCord: 0,
+    mapId: undefined,
+    place_id: '',
+    version: '1.0',
+};
 
+export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ 
+    onClose, 
+    onSubmit, 
+    initialData 
+}) => {
+    const [formData, setFormData] = useState<EquipmentFormData>(defaultFormData);
     const [selectedCategory, setSelectedCategory] = useState<any>(null);
     const [selectedManufacturer, setSelectedManufacturer] = useState<any>(null);
+    const [showMapSelector, setShowMapSelector] = useState<boolean>(false);
+    const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+    const [isInitialized, setIsInitialized] = useState<boolean>(false);
+    
     const categories = useUnit($categories);
     const manufacturers = useUnit($manufacturers);
+    const isUpdating = useUnit(updateEquipmentFx.pending);
 
+    // Стабилизируем initialData, чтобы избежать переинициализации
+    const stableInitialData = useMemo(() => {
+        if (!initialData) return null;
+        return {
+            ...initialData,
+            softwareEndDate: initialData.softwareEndDate || '',
+            updateDate: initialData.updateDate || '',
+            mapId: initialData.mapId || undefined,
+        };
+    }, [initialData?.id, initialData?.name, initialData?.category, initialData?.manufacturer]);
+
+    // Загружаем данные при монтировании
     useEffect(() => {
         fetchCategories();
         fetchManufacturers();
     }, []);
 
+    // Инициализируем форму данными только один раз
     useEffect(() => {
-        if (initialData) {
-            setFormData(initialData);
-            // Найти выбранную категорию по названию
-            const category = categories.find(cat => cat.name === initialData.category);
-            setSelectedCategory(category || null);
-            // Найти выбранного производителя по названию
-            const manufacturer = manufacturers.find(man => man.name === initialData.manufacturer);
-            setSelectedManufacturer(manufacturer || null);
-        } else {
-            setFormData({
-                id: 0,
-                name: '',
-                category: '',
-                releaseDate: '',
-                softwareStartDate: '',
-                softwareEndDate: '',
-                updateDate: '',
-                manufacturer: '',
-                xCord: 0,
-                yCord: 0,
-                waveRadius: undefined,
-                mapId: undefined,
-                place_id: '',
-                version: '1.0',
-            });
+        if (!isInitialized && stableInitialData) {
+            console.log('AddEquipmentPopup: Initializing form with data:', stableInitialData);
+            setFormData(stableInitialData);
+            setIsInitialized(true);
+        } else if (!isInitialized && !stableInitialData) {
+            console.log('AddEquipmentPopup: Initializing form with default data');
+            setFormData(defaultFormData);
             setSelectedCategory(null);
             setSelectedManufacturer(null);
+            setIsInitialized(true);
         }
-    }, [initialData, categories, manufacturers]);
+    }, [stableInitialData, isInitialized]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prevFormData => ({
-            ...prevFormData,
-            [name]: e.target.type === 'number' ? (value === '' ? 0 : Number(value)) : value
+    // Синхронизируем выбранные категорию и производителя только при инициализации
+    useEffect(() => {
+        if (isInitialized && stableInitialData && categories.length > 0 && manufacturers.length > 0) {
+            const category = categories.find(cat => cat.name === stableInitialData.category);
+            const manufacturer = manufacturers.find(man => man.name === stableInitialData.manufacturer);
+            
+            setSelectedCategory(category || null);
+            setSelectedManufacturer(manufacturer || null);
+        }
+    }, [isInitialized, stableInitialData, categories, manufacturers]);
+
+    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value, type } = e.target;
+        
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'number' ? (value === '' ? 0 : Number(value)) : value
         }));
-    };
+    }, []);
 
-    const handleCategoryChange = (value: any) => {
+    const handleCategoryChange = useCallback((value: any) => {
         setSelectedCategory(value);
-        setFormData(prevFormData => ({
-            ...prevFormData,
+        setFormData(prev => ({
+            ...prev,
             category: value?.name || ''
         }));
+        
         // Сбрасываем производителя при смене категории
         setSelectedManufacturer(null);
-        setFormData(prevFormData => ({
-            ...prevFormData,
+        setFormData(prev => ({
+            ...prev,
             manufacturer: ''
         }));
-    };
+    }, []);
 
-    const handleManufacturerChange = (value: any) => {
+    const handleManufacturerChange = useCallback((value: any) => {
         setSelectedManufacturer(value);
-        setFormData(prevFormData => ({
-            ...prevFormData,
+        setFormData(prev => ({
+            ...prev,
             manufacturer: value?.name || ''
         }));
-    };
+    }, []);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleLocationSelect = useCallback((x: number, y: number, mapId: number) => {
+        setFormData(prev => ({
+            ...prev,
+            xCord: x,
+            yCord: y,
+            mapId: mapId
+        }));
+    }, []);
+
+    const toggleMapSelector = useCallback(() => {
+        setShowMapSelector(prev => !prev);
+    }, []);
+
+    const handleSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log("AddEquipmentPopup: handleSubmit triggered. Data to submit:", formData);
-        onSubmit(formData);
-    };
+        e.stopPropagation();
+        
+        if (isSubmitting || isUpdating) {
+            return;
+        }
+        
+        // Валидация
+        if (!formData.mapId || !formData.xCord || !formData.yCord) {
+            alert('Пожалуйста, выберите место размещения на карте');
+            return;
+        }
+        
+        if (!formData.name || !formData.category || !formData.manufacturer) {
+            alert('Пожалуйста, заполните все обязательные поля');
+            return;
+        }
+        
+        setIsSubmitting(true);
+        
+        try {
+            await onSubmit(formData);
+        } catch (error) {
+            console.error('Error submitting form:', error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }, [formData, isSubmitting, isUpdating, onSubmit]);
+
+    const handleClose = useCallback(() => {
+        setIsInitialized(false);
+        onClose();
+    }, [onClose]);
+
+    const isEditMode = Boolean(initialData);
+    const isLoading = isSubmitting || isUpdating;
 
     return (
         <PopupOverlay>
             <PopupContainer>
-                <h2>{initialData ? 'Редактировать оборудование' : 'Добавить оборудование'}</h2>
+                <h2>{isEditMode ? 'Редактировать оборудование' : 'Добавить оборудование'}</h2>
                 <form onSubmit={handleSubmit}>
                     <FormField>
                         <Label>Название *</Label>
-                        <InputField name="name" value={formData.name ?? ''} onChange={handleChange} placeholder="Введите название оборудования" required />
+                        <InputField 
+                            name="name" 
+                            value={formData.name} 
+                            onChange={handleInputChange} 
+                            placeholder="Введите название оборудования" 
+                            required 
+                        />
                     </FormField>
                     
                     <FormField>
@@ -124,8 +194,8 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ onClose, o
                                 items={categories}
                                 value={selectedCategory}
                                 onChange={handleCategoryChange}
-                                getItemLabel={(item) => item.name}
-                                getItemKey={(item) => item.id.toString()}
+                                getItemLabel={(item: any) => item.name}
+                                getItemKey={(item: any) => item.id.toString()}
                                 placeholder="Выберите категорию"
                                 required
                             />
@@ -134,22 +204,44 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ onClose, o
                     
                     <FormField>
                         <Label>Дата закупки *</Label>
-                        <InputField name="releaseDate" value={formData.releaseDate ?? ''} type="date" onChange={handleChange} required />
+                        <InputField 
+                            name="releaseDate" 
+                            value={formData.releaseDate} 
+                            type="date" 
+                            onChange={handleInputChange} 
+                            required 
+                        />
                     </FormField>
                     
                     <FormField>
                         <Label>Дата устаревания *</Label>
-                        <InputField name="softwareStartDate" type="date" value={formData.softwareStartDate ?? ''} onChange={handleChange} required />
+                        <InputField 
+                            name="softwareStartDate" 
+                            type="date" 
+                            value={formData.softwareStartDate} 
+                            onChange={handleInputChange} 
+                            required 
+                        />
                     </FormField>
                     
                     <FormField>
                         <Label>Дата снятия</Label>
-                        <InputField name="softwareEndDate" type="date" value={formData.softwareEndDate ?? ''} onChange={handleChange} />
+                        <InputField 
+                            name="softwareEndDate" 
+                            type="date" 
+                            value={formData.softwareEndDate || ''} 
+                            onChange={handleInputChange} 
+                        />
                     </FormField>
                     
                     <FormField>
                         <Label>Дата обновления ПО</Label>
-                        <InputField name="updateDate" type="date" value={formData.updateDate ?? ''} onChange={handleChange} />
+                        <InputField 
+                            name="updateDate" 
+                            type="date" 
+                            value={formData.updateDate || ''} 
+                            onChange={handleInputChange} 
+                        />
                     </FormField>
                     
                     <FormField>
@@ -159,8 +251,8 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ onClose, o
                                 items={selectedCategory ? manufacturers.filter(man => man.category_id === selectedCategory.id) : manufacturers}
                                 value={selectedManufacturer}
                                 onChange={handleManufacturerChange}
-                                getItemLabel={(item) => item.name}
-                                getItemKey={(item) => item.id.toString()}
+                                getItemLabel={(item: any) => item.name}
+                                getItemKey={(item: any) => item.id.toString()}
                                 placeholder="Выберите производителя"
                                 required
                             />
@@ -169,37 +261,56 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ onClose, o
                     
                     <FormField>
                         <Label>Версия *</Label>
-                        <InputField name="version" placeholder="Введите версию" value={formData.version ?? '1.0'} onChange={handleChange} required />
+                        <InputField 
+                            name="version" 
+                            placeholder="Введите версию" 
+                            value={formData.version} 
+                            onChange={handleInputChange} 
+                            required 
+                        />
                     </FormField>
                     
                     <FormField>
                         <Label>Место *</Label>
-                        <InputField name="place_id" placeholder="Например: Admin Room" value={formData.place_id ?? ''} onChange={handleChange} required />
+                        <InputField 
+                            name="place_id" 
+                            placeholder="Например: Admin Room" 
+                            value={formData.place_id} 
+                            onChange={handleInputChange} 
+                            required 
+                        />
                     </FormField>
                     
                     <FormField>
-                        <Label>X Координата *</Label>
-                        <InputField name="xCord" type="number" placeholder="Введите X координату" value={formData.xCord ?? ''} onChange={handleChange} required />
+                        <Label>Размещение на карте *</Label>
+                        <LocationContainer>
+                            <LocationButton type="button" onClick={toggleMapSelector}>
+                                {formData.mapId && formData.xCord && formData.yCord 
+                                    ? `Выбрано: Этаж ${formData.mapId}, координаты (${formData.xCord}, ${formData.yCord})`
+                                    : 'Выбрать место на карте'
+                                }
+                            </LocationButton>
+                            {showMapSelector && (
+                                <MapSelectorContainer>
+                                    <InteractiveMap
+                                        onLocationSelect={handleLocationSelect}
+                                        selectedLocation={
+                                            formData.mapId && formData.xCord && formData.yCord
+                                                ? { x: formData.xCord, y: formData.yCord, mapId: formData.mapId }
+                                                : null
+                                        }
+                                        selectedMapId={formData.mapId || undefined}
+                                    />
+                                </MapSelectorContainer>
+                            )}
+                        </LocationContainer>
                     </FormField>
                     
-                    <FormField>
-                        <Label>Y Координата *</Label>
-                        <InputField name="yCord" type="number" placeholder="Введите Y координату" value={formData.yCord ?? ''} onChange={handleChange} required />
-                    </FormField>
-                    
-                    <FormField>
-                        <Label>Радиус волны</Label>
-                        <InputField name="waveRadius" type="number" placeholder="Введите радиус волны" value={formData.waveRadius ?? ''} onChange={handleChange} />
-                    </FormField>
-                    
-                    <FormField>
-                        <Label>ID карты</Label>
-                        <InputField name="mapId" type="number" placeholder="Введите ID карты" value={formData.mapId ?? ''} onChange={handleChange} />
-                    </FormField>
-
-                    <Button type="submit">Сохранить</Button>
+                    <Button type="submit" disabled={isLoading}>
+                        {isLoading ? 'Сохранение...' : 'Сохранить'}
+                    </Button>
                 </form>
-                <CloseButton onClick={onClose}>Закрыть</CloseButton>
+                <CloseButton onClick={handleClose}>Закрыть</CloseButton>
             </PopupContainer>
         </PopupOverlay>
     );
@@ -215,6 +326,7 @@ const PopupOverlay = styled('div', {
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1000,
 });
 
 const PopupContainer = styled('div', {
@@ -271,6 +383,13 @@ const Button = styled('button', {
     '&:hover': {
         backgroundColor: '#2563eb',
     },
+    '&:disabled': {
+        backgroundColor: '#9ca3af',
+        cursor: 'not-allowed',
+        '&:hover': {
+            backgroundColor: '#9ca3af',
+        },
+    },
 });
 
 const CloseButton = styled(Button, {
@@ -278,4 +397,39 @@ const CloseButton = styled(Button, {
     '&:hover': {
         backgroundColor: '#4b5563',
     },
+});
+
+const LocationContainer = styled('div', {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+});
+
+const LocationButton = styled('button', {
+    padding: '12px 16px',
+    backgroundColor: '#f3f4f6',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    textAlign: 'left',
+    color: '#374151',
+    
+    '&:hover': {
+        backgroundColor: '#e5e7eb',
+        borderColor: '#9ca3af',
+    },
+    
+    '&:focus': {
+        borderColor: '#3b82f6',
+        outline: 'none',
+        boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)',
+    },
+});
+
+const MapSelectorContainer = styled('div', {
+    border: '1px solid #d1d5db',
+    borderRadius: '8px',
+    padding: '16px',
+    backgroundColor: '#ffffff',
 });

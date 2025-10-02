@@ -15,9 +15,8 @@ export const EquipmentItem = ({
 }: EquipmentItemProps) => {
   const circleStyle: React.CSSProperties = {
     borderRadius: '50%',
-    border: `${showRadius && equipment.waveRadius ? '1px solid red' : ''}`,
+    border: showRadius ? '2px solid red' : '1px solid transparent',
     position: 'absolute',
-    padding: `${equipment.waveRadius || 0}%`,
     transform: 'translate(-50%, -50%)',
     zIndex: 100,
     left: `${equipment.xCord}%`,

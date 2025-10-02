@@ -2,13 +2,13 @@ import { Equipment } from '@/entities';
 import { styled } from '@stitches/react';
 import { useUnit } from 'effector-react';
 import { Header } from '..';
-import { $items, fetchEquipmentFx, deleteEquipment } from '../../model';
+import { $items, fetchEquipmentFx, deleteEquipment, updateEquipment } from '../../model';
 import { updateEquipmentFx } from '@/features/equipment/model/updateEquipmentFx';
 import { Filter } from './filter';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Types, getType } from '@/shared/lib/get-type';
 import axios from 'axios';
-import { Equipment as EquipmentType } from '@/shared/types';
+import { Equipment as EquipmentType, EquipmentFormData } from '@/shared/types';
 import { AddEquipmentPopup } from './euipment-popup';
 
 export const EquipmentList: React.FC = () => {
@@ -19,13 +19,31 @@ export const EquipmentList: React.FC = () => {
     const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
     const [isPopupOpen, setIsPopupOpen] = useState(false);
     const [editingEquipment, setEditingEquipment] = useState<EquipmentType | null>(null);
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [editingEquipmentId, setEditingEquipmentId] = useState<number | null>(null);
 
-    const setIsPopupOpenRef = useRef(setIsPopupOpen);
-    setIsPopupOpenRef.current = setIsPopupOpen;
+    // Добавляем логирование для отладки
+    useEffect(() => {
+        console.log('EquipmentList: equipmentList updated:', equipmentList);
+    }, [equipmentList]);
 
-    const setEditingEquipmentRef = useRef(setEditingEquipment);
-    setEditingEquipmentRef.current = setEditingEquipment;
+    // Добавляем useEffect для отслеживания изменений состояния попапа
+    useEffect(() => {
+        console.log("EquipmentList: isPopupOpen changed to:", isPopupOpen);
+    }, [isPopupOpen]);
 
+    useEffect(() => {
+        console.log("EquipmentList: editingEquipment changed to:", editingEquipment);
+    }, [editingEquipment]);
+
+    // Блокируем изменение editingEquipment во время обновления
+    useEffect(() => {
+        if (isUpdating) {
+            console.log("EquipmentList: Update in progress, blocking editingEquipment changes");
+        }
+    }, [isUpdating]);
+
+    // Не обновляем editingEquipment автоматически - это вызывает проблемы с формой
 
     useEffect(() => {
         fetchEquipmentFx();
@@ -90,7 +108,6 @@ export const EquipmentList: React.FC = () => {
             yCord: parseNumber(data.yCord),
             place_id: data.place_id, // Оставляем как строку
             version: data.version || "1.0",
-            waveRadius: data.waveRadius ? parseNumber(data.waveRadius) : undefined,
             mapId: data.mapId ? parseNumber(data.mapId) : undefined
         };
 
@@ -129,47 +146,63 @@ export const EquipmentList: React.FC = () => {
         }
     }, []);
 
-    const handleUpdateEquipment = useCallback(async (updatedData: EquipmentType) => {
-        console.log("EquipmentList: handleUpdateEquipment called with data:", updatedData);
+    const handleUpdateEquipment = useCallback(async (updatedData: EquipmentFormData) => {
+        if (!updatedData.id) {
+            console.error('Equipment ID is required for update');
+            return false;
+        }
+
+        if (isUpdating) {
+            console.log('Update already in progress, ignoring duplicate call');
+            return false;
+        }
+
+        setIsUpdating(true);
+        console.log('Starting update for equipment:', updatedData.id);
 
         try {
-            console.log("EquipmentList: Calling updateEquipmentFx...");
+            // Вызываем API без оптимистичного обновления
             await updateEquipmentFx({ id: updatedData.id, data: updatedData });
-            console.log("EquipmentList: updateEquipmentFx finished.");
-
-            console.log("EquipmentList: Calling fetchEquipmentFx...");
-            await fetchEquipmentFx();
-            console.log("EquipmentList: fetchEquipmentFx finished.");
-
+            
             alert("Оборудование обновлено");
             return true;
         } catch (error) {
-            console.error('EquipmentList: Ошибка обновления в handleUpdateEquipment:', error);
+            console.error('EquipmentList: Ошибка обновления:', error);
             alert('Не удалось обновить оборудование');
             return false;
+        } finally {
+            setIsUpdating(false);
         }
+    }, [isUpdating]);
+
+    const handleEditEquipment = useCallback((equipment: EquipmentType) => {
+        // Создаем копию объекта, чтобы избежать проблем с ссылками
+        const equipmentCopy = { ...equipment };
+        console.log('EquipmentList: Setting editingEquipment to copy:', equipmentCopy);
+        setIsPopupOpen(true);
+        setEditingEquipment(equipmentCopy);
+        setEditingEquipmentId(equipment.id);
     }, []);
 
-    const handleSubmitFromPopup = useCallback(async (data: any) => {
-        console.log("EquipmentList: handleSubmitFromPopup called. Data:", data);
-
+    const handleSubmitFromPopup = useCallback(async (data: EquipmentFormData) => {
         let success = false;
+        
         if (editingEquipment) {
-            console.log("EquipmentList: handleSubmitFromPopup -> calling handleUpdateEquipment...");
-            success = await handleUpdateEquipment(data);
-            console.log("EquipmentList: handleSubmitFromPopup -> handleUpdateEquipment finished. Success:", success);
+            // Режим редактирования
+            const dataWithId = { ...data, id: editingEquipment.id };
+            success = await handleUpdateEquipment(dataWithId);
         } else {
-            console.log("EquipmentList: handleSubmitFromPopup -> calling handleAddEquipment...");
+            // Режим добавления
             success = await handleAddEquipment(data);
-            console.log("EquipmentList: handleSubmitFromPopup -> handleAddEquipment finished. Success:", success);
         }
 
         if (success) {
-            console.log("EquipmentList: handleSubmitFromPopup -> Closing popup.");
-            setIsPopupOpenRef.current(false);
-            setEditingEquipmentRef.current(null);
-        } else {
-            console.log("EquipmentList: handleSubmitFromPopup -> Not closing popup due to failure.");
+            // Не закрываем попап сразу, даем время на обновление состояния
+            setTimeout(() => {
+                setIsPopupOpen(false);
+                setEditingEquipment(null);
+                setEditingEquipmentId(null);
+            }, 100);
         }
     }, [editingEquipment, handleUpdateEquipment, handleAddEquipment]);
 
@@ -195,22 +228,18 @@ export const EquipmentList: React.FC = () => {
                     equipment={equipment}
                     displayNumber={index + 1}
                     onDelete={() => handleDeleteEquipment(equipment.id)}
-                    onUpdate={() => {
-                        setEditingEquipment(equipment);
-                        setIsPopupOpen(true);
-                    }}
+                    onUpdate={() => handleEditEquipment(equipment)}
                 />
             ))}
 
             {isPopupOpen && (
                 <AddEquipmentPopup
-                    key={editingEquipment ? editingEquipment.id : 'new-equipment'}
                     initialData={editingEquipment || undefined}
                     onSubmit={handleSubmitFromPopup}
                     onClose={() => {
-                        console.log("EquipmentList: onClose from popup called.");
                         setIsPopupOpen(false);
                         setEditingEquipment(null);
+                        setEditingEquipmentId(null);
                     }}
                 />
             )}

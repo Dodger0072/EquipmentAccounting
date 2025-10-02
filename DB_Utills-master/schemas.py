@@ -14,8 +14,21 @@ class EquipmentCreate(BaseModel):
     manufacturer: str
     xCord: Optional[float] = None
     yCord: Optional[float] = None
-    waveRadius: Optional[float] = None
     mapId: Optional[int] = None
+
+class EquipmentUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    place_id: Optional[str] = None
+    version: Optional[str] = None
+    releaseDate: Optional[str] = None
+    softwareStartDate: Optional[str] = None
+    softwareEndDate: Optional[Union[str, None]] = None  # Явно разрешаем None для очистки поля
+    updateDate: Optional[Union[str, None]] = None  # Явно разрешаем None для очистки поля
+    manufacturer: Optional[str] = None
+    xCord: Optional[float] = None
+    yCord: Optional[float] = None
+    mapId: Optional[Union[int, None]] = None  # Явно разрешаем None для очистки поля
 
 class CategoryCreate(BaseModel):
     name: str

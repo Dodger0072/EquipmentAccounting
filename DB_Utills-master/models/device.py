@@ -21,7 +21,6 @@ class device(Base):
     manufacturer = Column(String)  # Оставляем для обратной совместимости
     xCord = Column(Float)
     yCord = Column(Float)
-    waveRadius = Column(Float)
     mapId = Column(Integer)
 
     # answers: Mapped[list[Answer]] = relationship(lazy="selectin")

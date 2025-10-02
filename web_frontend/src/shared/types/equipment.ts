@@ -6,11 +6,14 @@ export type Equipment = {
   id: number;
   releaseDate: string; // дата закупки
   softwareStartDate: string; // дата устаревания
-  softwareEndDate?: string; // дата снятия
-  updateDate?: string; // дата обновления по
+  softwareEndDate?: string | null; // дата снятия
+  updateDate?: string | null; // дата обновления по
   manufacturer: string;
   xCord: number;
   yCord: number;
-  waveRadius?: number | null;
   mapId?: number | null;
+};
+
+export type EquipmentFormData = Omit<Equipment, 'id'> & {
+  id?: number;
 };
