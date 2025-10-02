@@ -22,14 +22,30 @@ __factory = None
 
 def get_database_url(alembic: bool = False) -> str:
     schema = "postgresql+asyncpg"
-    file = open(".\\data\\config_db.json")
-    data = json.load(file)
-    file.close()
+    
+    # Попробуем получить настройки из переменных окружения
+    db_user = env('DB_USER')
+    db_password = env('DB_PASSWORD')
+    db_host = env('DB_HOST')
+    db_port = env('DB_PORT')
+    db_name = env('DB_NAME')
+    
+    # Если переменные окружения не заданы, используем JSON файл
+    if not all([db_user, db_password, db_host, db_port, db_name]):
+        file = open(".\\data\\config_db.json")
+        data = json.load(file)
+        file.close()
+        
+        db_user = data['db_login']
+        db_password = data['db_password']
+        db_host = data['db_host']
+        db_port = data['db_port']
+        db_name = data['db_name']
 
     if alembic:
         schema = "postgresql"
-    return (f"{schema}://{data['db_login']}:{data['db_password']}@"
-            f"{data['db_host']}:{data['db_port']}/{data['db_name']}")
+    return (f"{schema}://{db_user}:{db_password}@"
+            f"{db_host}:{db_port}/{db_name}")
 
 
 async def global_init():

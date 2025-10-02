@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, String, update, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.ext.declarative import declarative_base
-from models.db_session_sync import Base
+from models.db_session import Base
 
 
 class place(Base):
@@ -50,16 +50,6 @@ class place(Base):
         await session.commit()
         return result.rowcount > 0
 
-    @classmethod
-    async def get_place_by_id(cls, session: AsyncSession, place_id: int) -> Optional['place']:
-        """
-        Get a place by its ID.
-        :param session: database session
-        :param place_id: ID of the place to retrieve
-        :return: Place or None if not found
-        """
-        _ = await session.execute(select(cls).where(cls.id == place_id))
-        return _.scalar()
 
     @classmethod
     async def get_all_places(cls, session: AsyncSession) -> Sequence['place']:

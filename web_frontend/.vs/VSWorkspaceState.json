@@ -2,16 +2,15 @@
   "ExpandedNodes": [
     "",
     "\\src",
-    "\\src\\features",
-    "\\src\\features\\equipment",
-    "\\src\\features\\equipment\\model",
-    "\\src\\pages",
-    "\\src\\pages\\equipment",
-    "\\src\\widgets",
-    "\\src\\widgets\\equipment-list",
-    "\\src\\widgets\\equipment-list\\ui",
-    "\\src\\widgets\\equipment-list\\ui\\atoms"
+    "\\src\\shared",
+    "\\src\\shared\\ui",
+    "\\src\\shared\\ui\\molecules",
+    "\\src\\shared\\ui\\molecules\\header",
+    "\\src\\shared\\ui\\organisms",
+    "\\src\\shared\\ui\\organisms\\aside",
+    "\\src\\shared\\ui\\organisms\\aside\\ui",
+    "\\src\\widgets"
   ],
-  "SelectedNode": "\\src\\widgets\\equipment-list\\ui\\organisms\\euipment-popup.tsx",
+  "SelectedNode": "\\src\\widgets\\site-search",
   "PreviewInSolutionExplorer": false
 }

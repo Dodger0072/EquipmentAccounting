@@ -25,7 +25,7 @@ async def test(session: AsyncSession):
     test_device = device(
         name="Komputer",
         category="Test Category",
-        place_id=1,
+        place_id="1",  # String type as defined in model
         version="1.0",
         releaseDate=datetime.now().date(),
         softwareStartDate=datetime.now().date(),
@@ -38,7 +38,7 @@ async def test(session: AsyncSession):
     test_device1 = device(
         name="Test Device1",
         category="Test Category1",
-        place_id=2,
+        place_id="2",  # String type as defined in model
         version="2.0",
         releaseDate=datetime.now().date(),
         softwareStartDate=datetime.now().date(),
@@ -54,8 +54,8 @@ async def test(session: AsyncSession):
     await test_place.save(session=session)
 
     # Затем присвойте id места устройству
-    test_device.place_id = test_place.id
-    test_device1.place_id = test_place.id
+    test_device.place_id = str(test_place.id)
+    test_device1.place_id = str(test_place.id)
     # Сохраните устройство
     await test_device.save(session=session)
     await test_device1.save(session=session)

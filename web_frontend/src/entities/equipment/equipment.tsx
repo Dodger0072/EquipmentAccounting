@@ -13,7 +13,7 @@ type EquipmentProps = {
 };
 
 export const Equipment = ({ equipment, displayNumber, onDelete, onUpdate }: EquipmentProps) => {
-    const type = getType(equipment.softwareEndDate);
+    const type = getType(equipment.softwareEndDate || '');
     const [isEditOpen, setIsEditOpen] = useState(false);
 
     const handleSumbit = (data: EquipmentType) => {
@@ -22,19 +22,26 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onUpdate }: Equi
     }
     return (
         <EquipmentContainer type={type}>
+            <ActionButtons>
+                <IconButton 
+                    onClick={() => setIsEditOpen(true)}
+                    title="Редактировать"
+                >
+                    <EditIcon />
+                </IconButton>
+                <IconButton 
+                    onClick={onDelete}
+                    title="Удалить"
+                >
+                    <DeleteIcon />
+                </IconButton>
+            </ActionButtons>
             <Text>{displayNumber}</Text>
             <Text>{equipment.name}</Text>
-            <DeleteButtonStyled onClick={onDelete}>Удалить</DeleteButtonStyled>
-            <EditButtonStyled onClick={() => setIsEditOpen(true)}>Редактировать</EditButtonStyled>
-
-            <Text>{equipment.releaseDate ? new Date(equipment.releaseDate).toLocaleDateString() : 'Нет данных'}</Text>
-            <Text>{equipment.softwareStartDate}</Text>
-            <Text>{equipment.softwareEndDate}</Text>
-            <Text>
-                <EquipmentLink href={equipment.manufacturer}>
-                    Производитель
-                </EquipmentLink>
-            </Text>
+            <Text>{equipment.releaseDate ? equipment.releaseDate : 'Нет данных'}</Text>
+            <Text>{equipment.softwareStartDate || 'Нет данных'}</Text>
+            <Text>{equipment.softwareEndDate || 'Нет данных'}</Text>
+            <Text>{equipment.manufacturer}</Text>
             <Text>{equipment.place_id}</Text>
             {isEditOpen && (
                 <AddEquipmentPopup
@@ -47,11 +54,31 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onUpdate }: Equi
     );
 };
 
+// SVG иконки
+const EditIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+    </svg>
+);
+
+const DeleteIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="3,6 5,6 21,6"/>
+        <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
+        <line x1="10" y1="11" x2="10" y2="17"/>
+        <line x1="14" y1="11" x2="14" y2="17"/>
+    </svg>
+);
+
 const EquipmentContainer = styled('div', {
     display: 'grid',
-    gridTemplateColumns: '0.5fr 1.5fr 0.65fr 1.2fr 1fr 1fr 1fr 1fr 1fr',
-    padding: '16px',
+    gridTemplateColumns: '80px 60px 200px 120px 120px 120px 150px 100px',
+    padding: '20px 16px',
     borderBottom: '1px solid rgba(107, 114, 128, 0.19)',
+    alignItems: 'center',
+    minHeight: '60px',
+    gap: '16px',
     variants: {
         type: {
             warning: {
@@ -64,47 +91,35 @@ const EquipmentContainer = styled('div', {
     },
 });
 
-const EquipmentLink = styled('a', {
-    color: '#2563eb',
-    textDecoration: 'none',
+
+const ActionButtons = styled('div', {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
 });
 
-const DeleteButtonStyled = styled('button', {
-    backgroundColor: '#ef4444',
-    color: '#ffffff',
+const IconButton = styled('button', {
+    backgroundColor: 'transparent',
     border: 'none',
-    borderRadius: '4px',
-    padding: '8px 12px',
     cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px',
-    textAlign: 'center',
-    width: 'fit-content',
-    height: 'fit-content',
+    padding: '4px',
+    borderRadius: '4px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    color: '#6b7280', // серый цвет
+    transition: 'all 0.2s ease',
     '&:hover': {
-        opacity: 0.9,
+        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+        color: '#374151', // темнее при наведении
+        transform: 'scale(1.1)',
     },
-});
-
-const EditButtonStyled = styled('button', {
-    backgroundColor: '#2563eb',
-    color: '#ffffff',
-    border: 'none',
-    borderRadius: '4px',
-    padding: '8px 12px',
-    cursor: 'pointer',
-    fontWeight: 'bold',
-    fontSize: '14px',
-    textAlign: 'center',
-    width: 'fit-content',
-    height: 'fit-content',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    '&:hover': {
-        opacity: 0.9,
+    '&:active': {
+        transform: 'scale(0.95)',
+    },
+    '& svg': {
+        width: '16px',
+        height: '16px',
     },
 });

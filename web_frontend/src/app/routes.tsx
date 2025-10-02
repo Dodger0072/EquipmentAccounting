@@ -1,5 +1,5 @@
-// src/routes/routes.ts
-import { EquipmentPage, LoginPage, MapPage, SiteSearch, AboutPage, AboutProjectPage, ContactsPage, FAQPage, HelpPage, SupportPage} from '@/pages';
+
+import { EquipmentPage, LoginPage, MapPage, SiteSearch, AboutPage, AboutProjectPage, ContactsPage, FAQPage, HelpPage, SupportPage, CategoriesPage, ManufacturersPage} from '@/pages';
 
 export  interface Route {
   path: string;
@@ -23,6 +23,16 @@ export const routes: Route[] = [
         path: '/map',
         name: 'Карта',
         element: <MapPage />,
+      },
+      {
+        path: '/admin/categories',
+        name: 'Категории',
+        element: <CategoriesPage />,
+      },
+      {
+        path: '/admin/manufacturers',
+        name: 'Производители',
+        element: <ManufacturersPage />,
       },
       {
         path: '/search',

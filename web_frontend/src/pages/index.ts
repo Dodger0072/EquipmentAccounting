@@ -11,3 +11,6 @@ export * from './help/support'
 
 export * from './about/about_project'
 export * from './about/contacts'
+
+export * from './admin/categories'
+export * from './admin/manufacturers'

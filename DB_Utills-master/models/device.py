@@ -1,10 +1,9 @@
 import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, Sequence
-from sqlalchemy import Integer, String, Column, Float, ForeignKey, update, select, delete
+from sqlalchemy import Integer, String, Column, Float, ForeignKey, update, select, delete, Date
 from sqlalchemy.orm import relationship, Mapped, mapped_column
-from sqlalchemy.ext.declarative import declarative_base
-from models.db_session_sync import Base
+from models.db_session import Base
 
 
 class device(Base):
@@ -13,12 +12,13 @@ class device(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     category = Column(String)
-    place_id = Column(String)
+    place_id = Column(String)  # Название комнаты/помещения
     version = Column(String)
-    releaseDate = Column(String)  # или Date, если PostgreSQL
-    softwareStartDate = Column(String)
-    softwareEndDate = Column(String)
-    manufacturer = Column(String)
+    releaseDate = Column(Date)  # дата закупки
+    softwareStartDate = Column(Date)  # дата устаревания
+    softwareEndDate = Column(Date, nullable=True)  # дата снятия
+    updateDate = Column(Date, nullable=True)  # дата обновления по
+    manufacturer = Column(String)  # Оставляем для обратной совместимости
     xCord = Column(Float)
     yCord = Column(Float)
     waveRadius = Column(Float)
@@ -62,16 +62,6 @@ class device(Base):
         await session.commit()
         return result.rowcount > 0
 
-    @classmethod
-    async def get_device_by_id(cls, session: AsyncSession, device_id: int) -> Optional['device']:
-        """
-        Get a device by its ID.
-        :param session: database session
-        :param device_id: ID of the device to retrieve
-        :return: Device or None if not found
-        """
-        _ = await session.execute(select(cls).where(cls.id == device_id))
-        return _.scalar()
 
     @classmethod
     async def get_all_devices(cls, session: AsyncSession) -> Sequence['device']:

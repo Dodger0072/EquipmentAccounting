@@ -23,23 +23,17 @@ const items: SelectItem[] = [
     { label: 'Устаревшие', id: 3, value: 'outdated' },
 ];
 
-export const $items = createStore<Equipment[]>([
-    {
-        id: 1,
-        name: 'Router A',
-        category: 'router',
-        releaseDate: '2022-01-01',
-        softwareStartDate: '2022-02-01',
-        softwareEndDate: '2025-12-31',
-        manufacturer: 'https://www.google.co.uk/',
-        place_id: 'Server Room',
-        xCord: 10,
-        yCord: 28,
-        waveRadius: 20,
-        mapId: 1,
-    },
-    // ... остальные начальные данные ...
-])
+// Добавляем эффект для загрузки категорий
+export const fetchCategoriesFx = createEffect(async () => {
+    const response = await axios.get('http://localhost:8000/categories');
+    return response.data;
+});
+
+// Стор для категорий оборудования
+export const $equipmentCategories = createStore<any[]>([])
+    .on(fetchCategoriesFx.doneData, (_, categories) => categories);
+
+export const $items = createStore<Equipment[]>([])
     .on(
         addEquipment,
         (state, newItem) => [...state, newItem]

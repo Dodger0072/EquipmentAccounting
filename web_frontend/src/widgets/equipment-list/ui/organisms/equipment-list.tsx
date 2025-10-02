@@ -2,7 +2,7 @@ import { Equipment } from '@/entities';
 import { styled } from '@stitches/react';
 import { useUnit } from 'effector-react';
 import { Header } from '..';
-import { $items, addEquipment, fetchEquipmentFx, deleteEquipment } from '../../model';
+import { $items, fetchEquipmentFx, deleteEquipment } from '../../model';
 import { updateEquipmentFx } from '@/features/equipment/model/updateEquipmentFx';
 import { Filter } from './filter';
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -15,6 +15,8 @@ export const EquipmentList: React.FC = () => {
     const equipmentList = useUnit($items);
     const [searchTerm, setSearchTerm] = useState<string>('');
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+    const [selectedEquipmentCategory, setSelectedEquipmentCategory] = useState<string | null>(null);
+    const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
     const [isPopupOpen, setIsPopupOpen] = useState(false);
     const [editingEquipment, setEditingEquipment] = useState<EquipmentType | null>(null);
 
@@ -34,14 +36,22 @@ export const EquipmentList: React.FC = () => {
             ? equipment.name.toLowerCase().includes(searchTerm.toLowerCase())
             : true;
 
-        let matchesCategory = true;
+        let matchesStatusCategory = true;
         if (selectedCategoryId === 2) {
-            matchesCategory = getType(equipment.softwareEndDate) === Types.warning;
+            matchesStatusCategory = getType(equipment.softwareEndDate) === Types.warning;
         } else if (selectedCategoryId === 3) {
-            matchesCategory = getType(equipment.softwareEndDate) === Types.alert;
+            matchesStatusCategory = getType(equipment.softwareEndDate) === Types.alert;
         }
 
-        return matchesSearch && matchesCategory;
+        const matchesEquipmentCategory = selectedEquipmentCategory 
+            ? equipment.category === selectedEquipmentCategory
+            : true;
+
+            const matchesFloor = selectedFloor 
+                ? equipment.place_id === selectedFloor
+                : true;
+
+        return matchesSearch && matchesStatusCategory && matchesEquipmentCategory && matchesFloor;
     });
 
     const handleDeleteEquipment = async (id: number) => {
@@ -59,23 +69,48 @@ export const EquipmentList: React.FC = () => {
     };
 
     const handleAddEquipment = useCallback(async (data: any) => {
+        // Проверяем и преобразуем числовые поля
+        const parseNumber = (value: any) => {
+            if (value === null || value === undefined || value === '') {
+                return null;
+            }
+            const num = Number(value);
+            return isNaN(num) ? null : num;
+        };
+
         const numericData = {
             name: data.name,
             category: data.category,
             releaseDate: data.releaseDate,
             softwareStartDate: data.softwareStartDate,
-            softwareEndDate: data.softwareEndDate,
+            softwareEndDate: data.softwareEndDate || undefined,
+            updateDate: data.updateDate || undefined,
             manufacturer: data.manufacturer,
-            xCord: Number(data.xCord),
-            yCord: Number(data.yCord),
-            place_id: data.place_id,
+            xCord: parseNumber(data.xCord),
+            yCord: parseNumber(data.yCord),
+            place_id: data.place_id, // Оставляем как строку
             version: data.version || "1.0",
-            waveRadius: data.waveRadius ? Number(data.waveRadius) : undefined,
-            mapId: data.mapId ? Number(data.mapId) : undefined
+            waveRadius: data.waveRadius ? parseNumber(data.waveRadius) : undefined,
+            mapId: data.mapId ? parseNumber(data.mapId) : undefined
         };
 
+
+        // Проверяем обязательные поля
+        if (!numericData.place_id || numericData.place_id.trim() === '') {
+            alert(`Поле "Место" обязательно для заполнения. Получено: "${data.place_id}"`);
+            return false;
+        }
+        if (numericData.xCord === null || numericData.xCord === undefined) {
+            alert(`Поле "X Координата" обязательно для заполнения. Получено: ${data.xCord}`);
+            return false;
+        }
+        if (numericData.yCord === null || numericData.yCord === undefined) {
+            alert(`Поле "Y Координата" обязательно для заполнения. Получено: ${data.yCord}`);
+            return false;
+        }
+
         try {
-            console.log("EquipmentList: handleAddEquipment - Sending POST request...");
+            console.log("EquipmentList: handleAddEquipment - Sending POST request with data:", numericData);
             await axios.post<{ id: number }>('http://localhost:8000/add_device', numericData);
             console.log("EquipmentList: handleAddEquipment - POST request successful.");
             await fetchEquipmentFx();
@@ -84,7 +119,8 @@ export const EquipmentList: React.FC = () => {
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 console.error('Ошибка при добавлении оборудования:', error.response?.data);
-                alert('Произошла ошибка при добавлении оборудования.');
+                console.error('Отправленные данные:', numericData);
+                alert(`Произошла ошибка при добавлении оборудования: ${JSON.stringify(error.response?.data)}`);
             } else {
                 console.error("Неизвестная ошибка при добавлении:", error);
                 alert("Неизвестная ошибка при добавлении оборудования");
@@ -140,7 +176,12 @@ export const EquipmentList: React.FC = () => {
 
     return (
         <StyledContainer>
-            <Filter onSearch={setSearchTerm} onCategoryChange={setSelectedCategoryId} />
+            <Filter 
+                onSearch={setSearchTerm} 
+                onCategoryChange={setSelectedCategoryId}
+                onEquipmentCategoryChange={setSelectedEquipmentCategory}
+                onFloorChange={setSelectedFloor}
+            />
             <Header />
             <AddButton onClick={() => {
                 setEditingEquipment(null);

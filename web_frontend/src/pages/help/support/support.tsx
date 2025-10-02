@@ -1,6 +1,5 @@
 // src/pages/help/support.tsx
 import React, { useState } from 'react';
-import axios from 'axios';
 import { styled } from '@stitches/react';
 
 export const SupportPage: React.FC = () => {

@@ -62,7 +62,7 @@ export const SiteSearchPage: React.FC = () => {
   );
 };
 
-// Стили
+
 const Container = styled('div', {
   padding: '20px',
 });
@@ -107,9 +107,9 @@ const ListItem = styled('li', {
 });
 
 const StyledLink = styled(Link, {
-  textDecoration: 'none', // Убираем подчеркивание
-  color: 'inherit', // Наследуем цвет
+  textDecoration: 'none', 
+  color: 'inherit', 
   '&:hover': {
-    color: 'inherit', // Цвет при наведении
+    color: 'inherit', 
   },
 });

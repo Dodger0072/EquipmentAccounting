@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { styled } from '@stitches/react';
+import { Select } from '@consta/uikit/Select';
+import { useUnit } from 'effector-react';
 import { Equipment } from '../../../../shared/types';
+import { $categories, fetchCategories } from '@/pages/admin/categories/model';
+import { $manufacturers, fetchManufacturers } from '@/pages/admin/manufacturers/model';
 
 interface AddEquipmentPopupProps {
     onClose: () => void;
@@ -16,17 +20,35 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ onClose, o
         releaseDate: '',
         softwareStartDate: '',
         softwareEndDate: '',
+        updateDate: '',
         manufacturer: '',
-        xCord: undefined,
-        yCord: undefined,
+        xCord: 0,
+        yCord: 0,
         waveRadius: undefined,
         mapId: undefined,
         place_id: '',
+        version: '1.0',
     });
+
+    const [selectedCategory, setSelectedCategory] = useState<any>(null);
+    const [selectedManufacturer, setSelectedManufacturer] = useState<any>(null);
+    const categories = useUnit($categories);
+    const manufacturers = useUnit($manufacturers);
+
+    useEffect(() => {
+        fetchCategories();
+        fetchManufacturers();
+    }, []);
 
     useEffect(() => {
         if (initialData) {
             setFormData(initialData);
+            // Найти выбранную категорию по названию
+            const category = categories.find(cat => cat.name === initialData.category);
+            setSelectedCategory(category || null);
+            // Найти выбранного производителя по названию
+            const manufacturer = manufacturers.find(man => man.name === initialData.manufacturer);
+            setSelectedManufacturer(manufacturer || null);
         } else {
             setFormData({
                 id: 0,
@@ -35,21 +57,47 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ onClose, o
                 releaseDate: '',
                 softwareStartDate: '',
                 softwareEndDate: '',
+                updateDate: '',
                 manufacturer: '',
-                xCord: undefined,
-                yCord: undefined,
+                xCord: 0,
+                yCord: 0,
                 waveRadius: undefined,
                 mapId: undefined,
                 place_id: '',
+                version: '1.0',
             });
+            setSelectedCategory(null);
+            setSelectedManufacturer(null);
         }
-    }, [initialData]);
+    }, [initialData, categories, manufacturers]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         setFormData(prevFormData => ({
             ...prevFormData,
-            [name]: value
+            [name]: e.target.type === 'number' ? (value === '' ? 0 : Number(value)) : value
+        }));
+    };
+
+    const handleCategoryChange = (value: any) => {
+        setSelectedCategory(value);
+        setFormData(prevFormData => ({
+            ...prevFormData,
+            category: value?.name || ''
+        }));
+        // Сбрасываем производителя при смене категории
+        setSelectedManufacturer(null);
+        setFormData(prevFormData => ({
+            ...prevFormData,
+            manufacturer: ''
+        }));
+    };
+
+    const handleManufacturerChange = (value: any) => {
+        setSelectedManufacturer(value);
+        setFormData(prevFormData => ({
+            ...prevFormData,
+            manufacturer: value?.name || ''
         }));
     };
 
@@ -59,26 +107,95 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ onClose, o
         onSubmit(formData);
     };
 
-    const handleButtonClick = () => {
-        console.log("AddEquipmentPopup: 'Сохранить' button clicked.");
-    };
-
     return (
         <PopupOverlay>
             <PopupContainer>
                 <h2>{initialData ? 'Редактировать оборудование' : 'Добавить оборудование'}</h2>
                 <form onSubmit={handleSubmit}>
-                    <InputField name="name" value={formData.name ?? ''} onChange={handleChange} placeholder="Название" required />
-                    <InputField name="category" value={formData.category ?? ''} placeholder="Категория" onChange={handleChange} required />
-                    <InputField name="releaseDate" value={formData.releaseDate ?? ''} type="date" onChange={handleChange} required />
-                    <InputField name="softwareStartDate" type="date" value={formData.softwareStartDate ?? ''} onChange={handleChange} required />
-                    <InputField name="softwareEndDate" type="date" value={formData.softwareEndDate ?? ''} onChange={handleChange} required />
-                    <InputField name="manufacturer" placeholder="Производитель" value={formData.manufacturer ?? ''} onChange={handleChange} required />
-                    <InputField name="place_id" placeholder="Место" value={formData.place_id ?? ''} onChange={handleChange} required />
-                    <InputField name="xCord" type="number" placeholder="X Координата" value={formData.xCord ?? ''} onChange={handleChange} required />
-                    <InputField name="yCord" type="number" placeholder="Y Координата" value={formData.yCord ?? ''} onChange={handleChange} required />
-                    <InputField name="waveRadius" type="number" placeholder="Радиус волны" value={formData.waveRadius ?? ''} onChange={handleChange} required />
-                    <InputField name="mapId" type="number" placeholder="ID карты" value={formData.mapId ?? ''} onChange={handleChange} required />
+                    <FormField>
+                        <Label>Название *</Label>
+                        <InputField name="name" value={formData.name ?? ''} onChange={handleChange} placeholder="Введите название оборудования" required />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Категория *</Label>
+                        <SelectField>
+                            <Select
+                                items={categories}
+                                value={selectedCategory}
+                                onChange={handleCategoryChange}
+                                getItemLabel={(item) => item.name}
+                                getItemKey={(item) => item.id.toString()}
+                                placeholder="Выберите категорию"
+                                required
+                            />
+                        </SelectField>
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Дата закупки *</Label>
+                        <InputField name="releaseDate" value={formData.releaseDate ?? ''} type="date" onChange={handleChange} required />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Дата устаревания *</Label>
+                        <InputField name="softwareStartDate" type="date" value={formData.softwareStartDate ?? ''} onChange={handleChange} required />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Дата снятия</Label>
+                        <InputField name="softwareEndDate" type="date" value={formData.softwareEndDate ?? ''} onChange={handleChange} />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Дата обновления ПО</Label>
+                        <InputField name="updateDate" type="date" value={formData.updateDate ?? ''} onChange={handleChange} />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Производитель *</Label>
+                        <SelectField>
+                            <Select
+                                items={selectedCategory ? manufacturers.filter(man => man.category_id === selectedCategory.id) : manufacturers}
+                                value={selectedManufacturer}
+                                onChange={handleManufacturerChange}
+                                getItemLabel={(item) => item.name}
+                                getItemKey={(item) => item.id.toString()}
+                                placeholder="Выберите производителя"
+                                required
+                            />
+                        </SelectField>
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Версия *</Label>
+                        <InputField name="version" placeholder="Введите версию" value={formData.version ?? '1.0'} onChange={handleChange} required />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Место *</Label>
+                        <InputField name="place_id" placeholder="Например: Admin Room" value={formData.place_id ?? ''} onChange={handleChange} required />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>X Координата *</Label>
+                        <InputField name="xCord" type="number" placeholder="Введите X координату" value={formData.xCord ?? ''} onChange={handleChange} required />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Y Координата *</Label>
+                        <InputField name="yCord" type="number" placeholder="Введите Y координату" value={formData.yCord ?? ''} onChange={handleChange} required />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Радиус волны</Label>
+                        <InputField name="waveRadius" type="number" placeholder="Введите радиус волны" value={formData.waveRadius ?? ''} onChange={handleChange} />
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>ID карты</Label>
+                        <InputField name="mapId" type="number" placeholder="Введите ID карты" value={formData.mapId ?? ''} onChange={handleChange} />
+                    </FormField>
 
                     <Button type="submit">Сохранить</Button>
                 </form>
@@ -102,42 +219,63 @@ const PopupOverlay = styled('div', {
 
 const PopupContainer = styled('div', {
     backgroundColor: 'white',
-    padding: '20px',
+    padding: '24px',
     borderRadius: '8px',
     boxShadow: '0 0 10px rgba(0, 0, 0, 0.3)',
     display: 'flex',
     flexDirection: 'column',
-    width: '400px',
+    width: '500px',
+    maxHeight: '90vh',
+    overflowY: 'auto',
+});
+
+const FormField = styled('div', {
+    marginBottom: '16px',
+});
+
+const Label = styled('label', {
+    display: 'block',
+    marginBottom: '6px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#374151',
 });
 
 const InputField = styled('input', {
-    marginBottom: '12px',
+    width: '100%',
     padding: '10px',
-    border: '1px solid #ccc',
-    borderRadius: '4px',
-    fontSize: '16px',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    fontSize: '14px',
     '&:focus': {
-        borderColor: '#007bff',
+        borderColor: '#3b82f6',
         outline: 'none',
+        boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)',
     },
 });
 
+const SelectField = styled('div', {
+    width: '100%',
+});
+
 const Button = styled('button', {
-    padding: '10px',
-    backgroundColor: '#007bff',
+    padding: '12px 24px',
+    backgroundColor: '#3b82f6',
     color: 'white',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '6px',
     cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
     marginBottom: '10px',
     '&:hover': {
-        backgroundColor: '#0056b3',
+        backgroundColor: '#2563eb',
     },
 });
 
 const CloseButton = styled(Button, {
-    backgroundColor: '#6c757d',
+    backgroundColor: '#6b7280',
     '&:hover': {
-        backgroundColor: '#5a6268',
+        backgroundColor: '#4b5563',
     },
 });

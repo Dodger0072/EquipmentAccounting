@@ -1,15 +1,31 @@
-
 from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from models.device import device
-from models.db_session_sync import get_db, engine
-from models.db_session_sync import Base
-from schemas import EquipmentCreate
+from models.place import place
+from models.category import category
+from models.manufacturer import manufacturer
+from models.db_session import create_session, Base
+from schemas import EquipmentCreate, CategoryCreate, CategoryUpdate, CategoryResponse, ManufacturerCreate, ManufacturerUpdate, ManufacturerResponse
+from datetime import datetime
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List
+import asyncio
 
 
-app = FastAPI()
+# Инициализация базы данных при запуске
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    from models.db_session import global_init
+    await global_init()
+    yield
+    # Shutdown
+    pass
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,73 +35,366 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-Base.metadata.create_all(engine)
+@app.post("/add_place")
+async def add_place(place_data: dict):
+    async with create_session() as db:
+        from sqlalchemy import select
+        existing = await db.execute(select(place).where(place.name == place_data["name"]))
+        existing = existing.scalar_one_or_none()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="Place with this name already exists")
+        
+        new_place = place(name=place_data["name"])
+        db.add(new_place)
+        await db.commit()
+        await db.refresh(new_place)
+        return {"message": "Place added successfully", "id": new_place.id}
 
 @app.post("/add_device")
-def add_device(equipment: EquipmentCreate, db: Session = Depends(get_db)):
-    existing = db.query(device).filter(device.name == equipment.name).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Device with this name already exists")
-    new_device = device(**equipment.model_dump())
-    db.add(new_device)
-    db.commit()
-    db.refresh(new_device)
-    return {"message": "Device added successfully", "id": new_device.id}
+async def add_device(equipment: EquipmentCreate):
+    async with create_session() as db:
+        from sqlalchemy import select
+        existing = await db.execute(select(device).where(device.name == equipment.name))
+        existing = existing.scalar_one_or_none()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="Device with this name already exists")
+        
+        # Преобразуем строки дат в объекты date
+        equipment_dict = equipment.model_dump()
+        equipment_dict["releaseDate"] = datetime.strptime(equipment_dict["releaseDate"], "%Y-%m-%d").date()
+        equipment_dict["softwareStartDate"] = datetime.strptime(equipment_dict["softwareStartDate"], "%Y-%m-%d").date()
+        
+        # Обрабатываем опциональные даты
+        if equipment_dict.get("softwareEndDate"):
+            equipment_dict["softwareEndDate"] = datetime.strptime(equipment_dict["softwareEndDate"], "%Y-%m-%d").date()
+        else:
+            equipment_dict["softwareEndDate"] = None
+            
+        if equipment_dict.get("updateDate"):
+            equipment_dict["updateDate"] = datetime.strptime(equipment_dict["updateDate"], "%Y-%m-%d").date()
+        else:
+            equipment_dict["updateDate"] = None
+        
+        # Обрабатываем числовые поля
+        if equipment_dict.get("xCord") is not None and equipment_dict["xCord"] != "":
+            equipment_dict["xCord"] = float(equipment_dict["xCord"])
+        else:
+            equipment_dict["xCord"] = None
+            
+        if equipment_dict.get("yCord") is not None and equipment_dict["yCord"] != "":
+            equipment_dict["yCord"] = float(equipment_dict["yCord"])
+        else:
+            equipment_dict["yCord"] = None
+            
+        if equipment_dict.get("waveRadius") is not None and equipment_dict["waveRadius"] != "":
+            equipment_dict["waveRadius"] = float(equipment_dict["waveRadius"])
+        else:
+            equipment_dict["waveRadius"] = None
+            
+        if equipment_dict.get("mapId") is not None and equipment_dict["mapId"] != "":
+            equipment_dict["mapId"] = int(equipment_dict["mapId"])
+        else:
+            equipment_dict["mapId"] = None
+        
+        new_device = device(**equipment_dict)
+        db.add(new_device)
+        await db.commit()
+        await db.refresh(new_device)
+        return {"message": "Device added successfully", "id": new_device.id, "device": {
+            "id": new_device.id,
+            "name": new_device.name,
+            "category": new_device.category,
+            "xCord": new_device.xCord,
+            "yCord": new_device.yCord,
+            "place_id": new_device.place_id,
+            "version": new_device.version,
+            "releaseDate": new_device.releaseDate.isoformat() if new_device.releaseDate else None,
+            "softwareStartDate": new_device.softwareStartDate.isoformat() if new_device.softwareStartDate else None,
+            "softwareEndDate": new_device.softwareEndDate.isoformat() if new_device.softwareEndDate else None,
+            "updateDate": new_device.updateDate.isoformat() if new_device.updateDate else None,
+            "manufacturer": new_device.manufacturer,
+            "waveRadius": new_device.waveRadius,
+            "mapId": new_device.mapId,
+        }}
 
 @app.get("/search")
-def search_devices(db: Session = Depends(get_db)):
-    devices = db.query(device).all()
-    return {
-        "devices": [
-            {
-                "name": d.name, 
-                "category": d.category, 
-                "xCord": d.xCord, 
-                "yCord": d.yCord,
-                "id": d.id,
-                "place_id": d.place_id,
-                "version": d.version,
-                "releaseDate": d.releaseDate,
-                "softwareStartDate": d.softwareStartDate,
-                "softwareEndDate": d.softwareEndDate,
-                "manufacturer":d.manufacturer,
-                "waveRadius": d.waveRadius,
-                "mapId": d.mapId,
+async def search_devices():
+    async with create_session() as db:
+        from sqlalchemy import select
+        result = await db.execute(select(device))
+        devices = result.scalars().all()
+        
+        return {
+            "devices": [
+                {
+                    "name": d.name, 
+                    "category": d.category, 
+                    "xCord": d.xCord, 
+                    "yCord": d.yCord,
+                    "id": d.id,
+                    "place_id": d.place_id,
+                    "version": d.version,
+                    "releaseDate": d.releaseDate.isoformat() if d.releaseDate else None,
+                    "softwareStartDate": d.softwareStartDate.isoformat() if d.softwareStartDate else None,
+                    "softwareEndDate": d.softwareEndDate.isoformat() if d.softwareEndDate else None,
+                    "updateDate": d.updateDate.isoformat() if d.updateDate else None,
+                    "manufacturer": d.manufacturer,
+                    "waveRadius": d.waveRadius,
+                    "mapId": d.mapId,
                 } 
                 for d in devices
-                ]
-            }
+            ]
+        }
 
 @app.delete("/delete_device/{device_id}")
-def delete_device(device_id: int, db: Session = Depends(get_db)):
-    db_device = db.query(device).filter(device.id == device_id).first()
-
-    if not db_device:
-        raise HTTPException(status_code=404, detail="Device not found")
-
-    db.delete(db_device)
-    db.commit()
-
-    return {"message": f"Device {device_id} deleted successfully"}
+async def delete_device(device_id: int):
+    async with create_session() as db:
+        from sqlalchemy import select, delete
+        result = await db.execute(select(device).where(device.id == device_id))
+        db_device = result.scalar_one_or_none()
+        
+        if not db_device:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        await db.execute(delete(device).where(device.id == device_id))
+        await db.commit()
+        
+        return {"message": f"Device {device_id} deleted successfully"}
 
 @app.put("/update_device/{device_id}")
-def update_device(device_id: int, updated_data: dict, db: Session = Depends(get_db)):
-    db_device = db.query(device).filter(device.id == device_id).first()
-
-    if not db_device:
-        raise HTTPException(status_code=404, detail="Device not found")
-
-    for key, value in updated_data.items():
-        if hasattr(db_device, key):
-            setattr(db_device, key, value)
-
-    db.commit()
-    db.refresh(db_device)
-
-    return {"message": f"Device {device_id} обновлён", "device": db_device}
+async def update_device(device_id: int, updated_data: dict):
+    async with create_session() as db:
+        from sqlalchemy import select, update
+        result = await db.execute(select(device).where(device.id == device_id))
+        db_device = result.scalar_one_or_none()
+        
+        if not db_device:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        # Обрабатываем даты, если они присутствуют
+        processed_data = updated_data.copy()
+        if "releaseDate" in processed_data and isinstance(processed_data["releaseDate"], str):
+            processed_data["releaseDate"] = datetime.strptime(processed_data["releaseDate"], "%Y-%m-%d").date()
+        if "softwareStartDate" in processed_data and isinstance(processed_data["softwareStartDate"], str):
+            processed_data["softwareStartDate"] = datetime.strptime(processed_data["softwareStartDate"], "%Y-%m-%d").date()
+        if "softwareEndDate" in processed_data and processed_data["softwareEndDate"]:
+            if isinstance(processed_data["softwareEndDate"], str):
+                processed_data["softwareEndDate"] = datetime.strptime(processed_data["softwareEndDate"], "%Y-%m-%d").date()
+        if "updateDate" in processed_data and processed_data["updateDate"]:
+            if isinstance(processed_data["updateDate"], str):
+                processed_data["updateDate"] = datetime.strptime(processed_data["updateDate"], "%Y-%m-%d").date()
+        
+        # Обрабатываем числовые поля
+        if "xCord" in processed_data and processed_data["xCord"] is not None and processed_data["xCord"] != "":
+            processed_data["xCord"] = float(processed_data["xCord"])
+        elif "xCord" in processed_data:
+            processed_data["xCord"] = None
+            
+        if "yCord" in processed_data and processed_data["yCord"] is not None and processed_data["yCord"] != "":
+            processed_data["yCord"] = float(processed_data["yCord"])
+        elif "yCord" in processed_data:
+            processed_data["yCord"] = None
+            
+        if "waveRadius" in processed_data and processed_data["waveRadius"] is not None and processed_data["waveRadius"] != "":
+            processed_data["waveRadius"] = float(processed_data["waveRadius"])
+        elif "waveRadius" in processed_data:
+            processed_data["waveRadius"] = None
+            
+        if "mapId" in processed_data and processed_data["mapId"] is not None and processed_data["mapId"] != "":
+            processed_data["mapId"] = int(processed_data["mapId"])
+        elif "mapId" in processed_data:
+            processed_data["mapId"] = None
+        
+        # Обновляем поля устройства
+        for key, value in processed_data.items():
+            if hasattr(db_device, key):
+                setattr(db_device, key, value)
+        
+        await db.commit()
+        await db.refresh(db_device)
+        
+        return {"message": f"Device {device_id} обновлён", "device": {
+            "id": db_device.id,
+            "name": db_device.name,
+            "category": db_device.category,
+            "xCord": db_device.xCord,
+            "yCord": db_device.yCord,
+            "place_id": db_device.place_id,
+            "version": db_device.version,
+            "releaseDate": db_device.releaseDate.isoformat() if db_device.releaseDate else None,
+            "softwareStartDate": db_device.softwareStartDate.isoformat() if db_device.softwareStartDate else None,
+            "softwareEndDate": db_device.softwareEndDate.isoformat() if db_device.softwareEndDate else None,
+            "updateDate": db_device.updateDate.isoformat() if db_device.updateDate else None,
+            "manufacturer": db_device.manufacturer,
+            "waveRadius": db_device.waveRadius,
+            "mapId": db_device.mapId,
+        }}
 
 @app.post("/login")
 def login(credentials: dict):
     if credentials.get("username") == "admin" and credentials.get("password") == "12345":
         return {"token": "my-secret-jwt"}
     raise HTTPException(status_code=401, detail="Invalid credentials")
+
+# API endpoints для категорий
+@app.get("/categories", tags=["Категории"])
+async def get_categories():
+    """Получить все категории"""
+    async with create_session() as db:
+        categories = await category.get_all_categories(db)
+        return [cat.to_dict() for cat in categories]
+
+@app.post("/categories", tags=["Категории"])
+async def create_category(category_data: CategoryCreate):
+    """Создать новую категорию"""
+    async with create_session() as db:
+        # Проверяем, существует ли категория с таким именем
+        existing = await category.get_category_by_name(db, category_data.name)
+        if existing:
+            raise HTTPException(status_code=400, detail="Category with this name already exists")
+        
+        new_category = await category.insert_category(db, category_data.model_dump())
+        return new_category.to_dict()
+
+@app.get("/categories/{category_id}", tags=["Категории"])
+async def get_category(category_id: int):
+    """Получить категорию по ID"""
+    async with create_session() as db:
+        cat = await category.get_category_by_id(db, category_id)
+        if not cat:
+            raise HTTPException(status_code=404, detail="Category not found")
+        return cat.to_dict()
+
+@app.put("/categories/{category_id}", tags=["Категории"])
+async def update_category(category_id: int, category_data: CategoryUpdate):
+    """Обновить категорию"""
+    async with create_session() as db:
+        # Проверяем, существует ли категория
+        existing = await category.get_category_by_id(db, category_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        # Если обновляется имя, проверяем уникальность
+        if category_data.name and category_data.name != existing.name:
+            name_check = await category.get_category_by_name(db, category_data.name)
+            if name_check:
+                raise HTTPException(status_code=400, detail="Category with this name already exists")
+        
+        # Обновляем только переданные поля
+        update_data = {k: v for k, v in category_data.model_dump().items() if v is not None}
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No data to update")
+        
+        updated_category = await category.update_category(db, category_id, update_data)
+        return updated_category.to_dict()
+
+@app.delete("/categories/{category_id}", tags=["Категории"])
+async def delete_category(category_id: int):
+    """Удалить категорию"""
+    async with create_session() as db:
+        # Проверяем, существует ли категория
+        existing = await category.get_category_by_id(db, category_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        success = await category.delete_category(db, category_id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete category")
+        
+        return {"message": f"Category {category_id} deleted successfully"}
+
+# API endpoints для производителей
+@app.get("/manufacturers", tags=["Производители"])
+async def get_manufacturers():
+    """Получить всех производителей"""
+    async with create_session() as db:
+        manufacturers = await manufacturer.get_all_manufacturers(db)
+        return [man.to_dict() for man in manufacturers]
+
+@app.get("/manufacturers/category/{category_id}", tags=["Производители"])
+async def get_manufacturers_by_category(category_id: int):
+    """Получить производителей по категории"""
+    async with create_session() as db:
+        # Проверяем, существует ли категория
+        existing_category = await category.get_category_by_id(db, category_id)
+        if not existing_category:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        manufacturers = await manufacturer.get_manufacturers_by_category(db, category_id)
+        return [man.to_dict() for man in manufacturers]
+
+@app.post("/manufacturers", tags=["Производители"])
+async def create_manufacturer(manufacturer_data: ManufacturerCreate):
+    """Создать нового производителя"""
+    async with create_session() as db:
+        # Проверяем, существует ли категория
+        existing_category = await category.get_category_by_id(db, manufacturer_data.category_id)
+        if not existing_category:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        # Проверяем, существует ли производитель с таким именем
+        existing = await manufacturer.get_manufacturer_by_name(db, manufacturer_data.name)
+        if existing:
+            raise HTTPException(status_code=400, detail="Manufacturer with this name already exists")
+        
+        new_manufacturer = await manufacturer.insert_manufacturer(db, manufacturer_data.model_dump())
+        return new_manufacturer.to_dict()
+
+@app.get("/manufacturers/{manufacturer_id}", tags=["Производители"])
+async def get_manufacturer(manufacturer_id: int):
+    """Получить производителя по ID"""
+    async with create_session() as db:
+        man = await manufacturer.get_manufacturer_by_id(db, manufacturer_id)
+        if not man:
+            raise HTTPException(status_code=404, detail="Manufacturer not found")
+        return man.to_dict()
+
+@app.put("/manufacturers/{manufacturer_id}", tags=["Производители"])
+async def update_manufacturer(manufacturer_id: int, manufacturer_data: ManufacturerUpdate):
+    """Обновить производителя"""
+    async with create_session() as db:
+        # Проверяем, существует ли производитель
+        existing = await manufacturer.get_manufacturer_by_id(db, manufacturer_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Manufacturer not found")
+        
+        # Если обновляется категория, проверяем её существование
+        if manufacturer_data.category_id and manufacturer_data.category_id != existing.category_id:
+            category_check = await category.get_category_by_id(db, manufacturer_data.category_id)
+            if not category_check:
+                raise HTTPException(status_code=404, detail="Category not found")
+        
+        # Если обновляется имя, проверяем уникальность
+        if manufacturer_data.name and manufacturer_data.name != existing.name:
+            name_check = await manufacturer.get_manufacturer_by_name(db, manufacturer_data.name)
+            if name_check:
+                raise HTTPException(status_code=400, detail="Manufacturer with this name already exists")
+        
+        # Обновляем только переданные поля
+        update_data = {k: v for k, v in manufacturer_data.model_dump().items() if v is not None}
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No data to update")
+        
+        updated_manufacturer = await manufacturer.update_manufacturer(db, manufacturer_id, update_data)
+        return updated_manufacturer.to_dict()
+
+@app.delete("/manufacturers/{manufacturer_id}", tags=["Производители"])
+async def delete_manufacturer(manufacturer_id: int):
+    """Удалить производителя"""
+    async with create_session() as db:
+        # Проверяем, существует ли производитель
+        existing = await manufacturer.get_manufacturer_by_id(db, manufacturer_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Manufacturer not found")
+        
+        success = await manufacturer.delete_manufacturer(db, manufacturer_id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete manufacturer")
+        
+        return {"message": f"Manufacturer {manufacturer_id} deleted successfully"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
