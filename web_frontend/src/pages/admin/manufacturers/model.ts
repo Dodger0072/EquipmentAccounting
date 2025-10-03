@@ -19,7 +19,10 @@ export const $selectedCategory = createStore<number | null>(null);
 
 // Эффекты
 export const fetchManufacturersFx = createEffect(async () => {
-  return await getManufacturers();
+  console.log('fetchManufacturersFx: Starting to fetch manufacturers');
+  const result = await getManufacturers();
+  console.log('fetchManufacturersFx: Manufacturers fetched:', result);
+  return result;
 });
 
 export const fetchCategoriesFx = createEffect(async () => {
@@ -43,9 +46,14 @@ export const deleteManufacturerFx = createEffect(async (id: number) => {
 $manufacturers
   .on(fetchManufacturersFx.doneData, (_, manufacturers) => manufacturers)
   .on(addManufacturerFx.doneData, (state, newManufacturer) => [...state, newManufacturer])
-  .on(updateManufacturerFx.doneData, (state, updatedManufacturer) =>
-    state.map(manufacturer => manufacturer.id === updatedManufacturer.id ? updatedManufacturer : manufacturer)
-  )
+  .on(updateManufacturerFx.doneData, (state, updatedManufacturer) => {
+    // Сохраняем исходный порядок при обновлении
+    return state.map(manufacturer => 
+      manufacturer.id === updatedManufacturer.id 
+        ? { ...manufacturer, ...updatedManufacturer } // Обновляем только измененные поля
+        : manufacturer
+    );
+  })
   .on(deleteManufacturerFx.doneData, (state, deletedId) =>
     state.filter(manufacturer => manufacturer.id !== deletedId)
   );

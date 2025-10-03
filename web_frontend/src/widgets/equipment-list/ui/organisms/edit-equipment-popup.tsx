@@ -2,36 +2,37 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { styled } from '@stitches/react';
 import { Select } from '@consta/uikit/Select';
 import { useUnit } from 'effector-react';
-import { EquipmentFormData } from '../../../../shared/types';
+import { EquipmentFormData, Equipment } from '../../../../shared/types';
 import { $categories, fetchCategories } from '@/pages/admin/categories/model';
 import { $manufacturers, fetchManufacturers } from '@/pages/admin/manufacturers/model';
 import { InteractiveMap } from '@/widgets/map/ui/organisms';
 
-interface AddEquipmentPopupProps {
+interface EditEquipmentPopupProps {
+    equipment: Equipment;
     onClose: () => void;
     onSubmit: (data: EquipmentFormData) => void;
 }
 
-const defaultFormData: EquipmentFormData = {
-    name: '',
-    category: '',
-    releaseDate: '',
-    softwareStartDate: '',
-    softwareEndDate: '',
-    updateDate: '',
-    manufacturer: '',
-    xCord: 0,
-    yCord: 0,
-    mapId: undefined,
-    place_id: '',
-    version: '1.0',
-};
-
-export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({ 
+export const EditEquipmentPopup: React.FC<EditEquipmentPopupProps> = ({ 
+    equipment,
     onClose, 
     onSubmit
 }) => {
-    const [formData, setFormData] = useState<EquipmentFormData>(defaultFormData);
+    const [formData, setFormData] = useState<EquipmentFormData>({
+        name: equipment.name,
+        category: equipment.category,
+        releaseDate: equipment.releaseDate,
+        softwareStartDate: equipment.softwareStartDate,
+        softwareEndDate: equipment.softwareEndDate || '',
+        updateDate: equipment.updateDate || '',
+        manufacturer: equipment.manufacturer,
+        xCord: equipment.xCord,
+        yCord: equipment.yCord,
+        mapId: equipment.mapId || undefined,
+        place_id: equipment.place_id,
+        version: equipment.version,
+        id: equipment.id,
+    });
     const [selectedCategory, setSelectedCategory] = useState<any>(null);
     const [selectedManufacturer, setSelectedManufacturer] = useState<any>(null);
     const [showMapSelector, setShowMapSelector] = useState<boolean>(false);
@@ -42,19 +43,30 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({
 
     // Загружаем данные при монтировании
     useEffect(() => {
-        console.log('AddEquipmentPopup: Fetching categories and manufacturers');
         fetchCategories();
         fetchManufacturers();
     }, []);
 
-    // Логируем изменения в данных
+    // Устанавливаем выбранные категорию и производителя при загрузке
     useEffect(() => {
-        console.log('AddEquipmentPopup: Categories updated:', categories);
-    }, [categories]);
+        if (categories.length > 0) {
+            const category = categories.find(cat => cat.name === equipment.category);
+            if (category) {
+                setSelectedCategory(category);
+            }
+        }
+    }, [categories, equipment.category]);
 
     useEffect(() => {
-        console.log('AddEquipmentPopup: Manufacturers updated:', manufacturers);
-    }, [manufacturers]);
+        if (manufacturers.length > 0 && selectedCategory) {
+            const manufacturer = manufacturers.find(man => 
+                man.name === equipment.manufacturer && man.category_id === selectedCategory.id
+            );
+            if (manufacturer) {
+                setSelectedManufacturer(manufacturer);
+            }
+        }
+    }, [manufacturers, selectedCategory, equipment.manufacturer]);
 
     const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type } = e.target;
@@ -140,7 +152,7 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({
     return (
         <PopupOverlay>
             <PopupContainer>
-                <h2>Добавить оборудование</h2>
+                <h2>Редактировать оборудование</h2>
                 <form onSubmit={handleSubmit}>
                     <FormField>
                         <Label>Название *</Label>
@@ -240,7 +252,7 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({
                         <Label>Место *</Label>
                         <InputField 
                             name="place_id" 
-                            placeholder="Введите название места" 
+                            placeholder="Например: Admin Room" 
                             value={formData.place_id} 
                             onChange={handleInputChange} 
                             required 
@@ -273,7 +285,7 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({
                     </FormField>
                     
                     <Button type="submit" disabled={isLoading}>
-                        {isLoading ? 'Сохранение...' : 'Сохранить'}
+                        {isLoading ? 'Сохранение...' : 'Сохранить изменения'}
                     </Button>
                 </form>
                 <CloseButton onClick={handleClose}>Закрыть</CloseButton>

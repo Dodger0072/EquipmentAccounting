@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete, update
 from models.device import device
 from models.place import place
 from models.category import category
@@ -52,7 +53,6 @@ async def options_handler(request: Request, path: str):
 @app.post("/add_place")
 async def add_place(place_data: dict):
     async with create_session() as db:
-        from sqlalchemy import select
         existing = await db.execute(select(place).where(place.name == place_data["name"]))
         existing = existing.scalar_one_or_none()
         
@@ -68,7 +68,6 @@ async def add_place(place_data: dict):
 @app.post("/add_device")
 async def add_device(equipment: EquipmentCreate):
     async with create_session() as db:
-        from sqlalchemy import select
         existing = await db.execute(select(device).where(device.name == equipment.name))
         existing = existing.scalar_one_or_none()
         
@@ -130,7 +129,6 @@ async def add_device(equipment: EquipmentCreate):
 @app.get("/search")
 async def search_devices():
     async with create_session() as db:
-        from sqlalchemy import select
         result = await db.execute(select(device))
         devices = result.scalars().all()
         
@@ -158,7 +156,6 @@ async def search_devices():
 @app.delete("/delete_device/{device_id}")
 async def delete_device(device_id: int):
     async with create_session() as db:
-        from sqlalchemy import select, delete
         result = await db.execute(select(device).where(device.id == device_id))
         db_device = result.scalar_one_or_none()
         
@@ -170,80 +167,102 @@ async def delete_device(device_id: int):
         
         return {"message": f"Device {device_id} deleted successfully"}
 
-@app.put("/update_device/{device_id}")
-async def update_device(device_id: int, updated_data: EquipmentUpdate):
-    """Обновить оборудование по ID"""
+@app.delete("/delete_devices_by_category/{category_id}")
+async def delete_devices_by_category(category_id: int):
+    """Удалить все устройства категории"""
     async with create_session() as db:
-        from sqlalchemy import select
+        # Получаем категорию
+        category_result = await db.execute(select(category).where(category.id == category_id))
+        category_obj = category_result.scalar_one_or_none()
         
-        # Получаем устройство из базы данных
+        if not category_obj:
+            raise HTTPException(status_code=404, detail="Category not found")
+        
+        # Получаем все устройства этой категории
+        devices_result = await db.execute(select(device).where(device.category == category_obj.name))
+        devices = devices_result.scalars().all()
+        
+        if not devices:
+            raise HTTPException(status_code=404, detail="No devices found for this category")
+        
+        # Удаляем все устройства
+        await db.execute(delete(device).where(device.category == category_obj.name))
+        await db.commit()
+        
+        return {
+            "message": f"All devices from category '{category_obj.name}' deleted successfully",
+            "deleted_count": len(devices)
+        }
+
+@app.put("/update_device/{device_id}")
+async def update_device(device_id: int, equipment: EquipmentUpdate):
+    async with create_session() as db:
         result = await db.execute(select(device).where(device.id == device_id))
         db_device = result.scalar_one_or_none()
         
         if not db_device:
             raise HTTPException(status_code=404, detail="Device not found")
         
-        # Получаем только переданные поля (исключаем None)
-        update_data = updated_data.model_dump(exclude_unset=True)
+        # Преобразуем данные для обновления
+        update_data = equipment.model_dump(exclude_unset=True)
         
-        if not update_data:
-            raise HTTPException(status_code=400, detail="No data to update")
+        # Обрабатываем даты, если они переданы
+        if "releaseDate" in update_data and update_data["releaseDate"]:
+            update_data["releaseDate"] = datetime.strptime(update_data["releaseDate"], "%Y-%m-%d").date()
         
-        # Обрабатываем даты
-        for date_field in ["releaseDate", "softwareStartDate", "softwareEndDate", "updateDate"]:
-            if date_field in update_data and update_data[date_field]:
-                try:
-                    update_data[date_field] = datetime.strptime(update_data[date_field], "%Y-%m-%d").date()
-                except ValueError:
-                    raise HTTPException(status_code=400, detail=f"Invalid date format for {date_field}")
-            elif date_field in update_data and update_data[date_field] is None:
-                # Явно устанавливаем None для очистки поля
-                update_data[date_field] = None
+        if "softwareStartDate" in update_data and update_data["softwareStartDate"]:
+            update_data["softwareStartDate"] = datetime.strptime(update_data["softwareStartDate"], "%Y-%m-%d").date()
+        
+        if "softwareEndDate" in update_data and update_data["softwareEndDate"]:
+            update_data["softwareEndDate"] = datetime.strptime(update_data["softwareEndDate"], "%Y-%m-%d").date()
+        elif "softwareEndDate" in update_data and update_data["softwareEndDate"] is None:
+            update_data["softwareEndDate"] = None
+            
+        if "updateDate" in update_data and update_data["updateDate"]:
+            update_data["updateDate"] = datetime.strptime(update_data["updateDate"], "%Y-%m-%d").date()
+        elif "updateDate" in update_data and update_data["updateDate"] is None:
+            update_data["updateDate"] = None
         
         # Обрабатываем числовые поля
-        for num_field in ["xCord", "yCord"]:
-            if num_field in update_data and update_data[num_field] is not None:
-                try:
-                    update_data[num_field] = float(update_data[num_field])
-                except (ValueError, TypeError):
-                    raise HTTPException(status_code=400, detail=f"Invalid number format for {num_field}")
+        if "xCord" in update_data and update_data["xCord"] is not None and update_data["xCord"] != "":
+            update_data["xCord"] = float(update_data["xCord"])
+        elif "xCord" in update_data and (update_data["xCord"] is None or update_data["xCord"] == ""):
+            update_data["xCord"] = None
+            
+        if "yCord" in update_data and update_data["yCord"] is not None and update_data["yCord"] != "":
+            update_data["yCord"] = float(update_data["yCord"])
+        elif "yCord" in update_data and (update_data["yCord"] is None or update_data["yCord"] == ""):
+            update_data["yCord"] = None
+            
+        if "mapId" in update_data and update_data["mapId"] is not None and update_data["mapId"] != "":
+            update_data["mapId"] = int(update_data["mapId"])
+        elif "mapId" in update_data and (update_data["mapId"] is None or update_data["mapId"] == ""):
+            update_data["mapId"] = None
         
-        if "mapId" in update_data and update_data["mapId"] is not None:
-            try:
-                update_data["mapId"] = int(update_data["mapId"])
-            except (ValueError, TypeError):
-                raise HTTPException(status_code=400, detail="Invalid mapId format")
-        
-        # Обновляем поля устройства
-        for key, value in update_data.items():
-            if hasattr(db_device, key):
-                setattr(db_device, key, value)
-        
+        # Выполняем обновление
+        await db.execute(update(device).where(device.id == device_id).values(**update_data))
         await db.commit()
-        await db.refresh(db_device)
         
-        # Возвращаем обновленное устройство
-        response_data = {
-            "message": f"Device {device_id} updated successfully",
-            "device": {
-                "id": db_device.id,
-                "name": db_device.name,
-                "category": db_device.category,
-                "xCord": db_device.xCord,
-                "yCord": db_device.yCord,
-                "place_id": db_device.place_id,
-                "version": db_device.version,
-                "releaseDate": db_device.releaseDate.isoformat() if db_device.releaseDate else None,
-                "softwareStartDate": db_device.softwareStartDate.isoformat() if db_device.softwareStartDate else None,
-                "softwareEndDate": db_device.softwareEndDate.isoformat() if db_device.softwareEndDate else None,
-                "updateDate": db_device.updateDate.isoformat() if db_device.updateDate else None,
-                "manufacturer": db_device.manufacturer,
-                "mapId": db_device.mapId,
-            }
-        }
+        # Получаем обновленное устройство
+        result = await db.execute(select(device).where(device.id == device_id))
+        updated_device = result.scalar_one()
         
-        print(f"API: Returning updated device data: {response_data}")
-        return response_data
+        return {"message": "Device updated successfully", "device": {
+            "id": updated_device.id,
+            "name": updated_device.name,
+            "category": updated_device.category,
+            "xCord": updated_device.xCord,
+            "yCord": updated_device.yCord,
+            "place_id": updated_device.place_id,
+            "version": updated_device.version,
+            "releaseDate": updated_device.releaseDate.isoformat() if updated_device.releaseDate else None,
+            "softwareStartDate": updated_device.softwareStartDate.isoformat() if updated_device.softwareStartDate else None,
+            "softwareEndDate": updated_device.softwareEndDate.isoformat() if updated_device.softwareEndDate else None,
+            "updateDate": updated_device.updateDate.isoformat() if updated_device.updateDate else None,
+            "manufacturer": updated_device.manufacturer,
+            "mapId": updated_device.mapId,
+        }}
+
 
 @app.post("/login")
 def login(credentials: dict):
@@ -311,6 +330,23 @@ async def delete_category(category_id: int):
         existing = await category.get_category_by_id(db, category_id)
         if not existing:
             raise HTTPException(status_code=404, detail="Category not found")
+        
+        # Проверяем, есть ли связанные устройства
+        related_devices = await device.get_devices_by_category(db, existing.name)
+        if related_devices:
+            # Преобразуем устройства в список словарей для JSON ответа
+            devices_list = [device.to_dict() for device in related_devices]
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    "message": f"Нельзя удалить категорию '{existing.name}', так как к ней привязаны устройства",
+                    "devices": devices_list
+                }
+            )
+        
+        # Удаляем всех производителей этой категории
+        deleted_manufacturers = await manufacturer.delete_manufacturers_by_category(db, category_id)
+        print(f"Deleted {deleted_manufacturers} manufacturers for category {category_id}")
         
         success = await category.delete_category(db, category_id)
         if not success:
@@ -401,6 +437,14 @@ async def delete_manufacturer(manufacturer_id: int):
         existing = await manufacturer.get_manufacturer_by_id(db, manufacturer_id)
         if not existing:
             raise HTTPException(status_code=404, detail="Manufacturer not found")
+        
+        # Проверяем, есть ли связанные устройства
+        related_devices = await device.get_devices_by_manufacturer(db, existing.name)
+        if related_devices:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Нельзя удалить производителя '{existing.name}', так как к нему привязаны устройства"
+            )
         
         success = await manufacturer.delete_manufacturer(db, manufacturer_id)
         if not success:

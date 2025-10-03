@@ -14,19 +14,19 @@ export const fetchPlacesFx = createEffect(async () => {
     setTimeout(() => {
       resolve([
         {
-          id: 1,
-          label: 'Этаж 1',
-          mapUrl: '/maps/map1.png',
-        },
-        {
           id: 2,
           label: 'Этаж 2',
           mapUrl: '/maps/map2.png',
         },
-		{
+        {
           id: 3,
           label: 'Этаж 3',
           mapUrl: '/maps/map3.png',
+        },
+        {
+          id: 4,
+          label: 'Этаж 4',
+          mapUrl: '/maps/map1.png',
         },
       ]);
     }, 100);

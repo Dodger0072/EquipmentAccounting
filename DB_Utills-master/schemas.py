@@ -23,12 +23,13 @@ class EquipmentUpdate(BaseModel):
     version: Optional[str] = None
     releaseDate: Optional[str] = None
     softwareStartDate: Optional[str] = None
-    softwareEndDate: Optional[Union[str, None]] = None  # Явно разрешаем None для очистки поля
-    updateDate: Optional[Union[str, None]] = None  # Явно разрешаем None для очистки поля
+    softwareEndDate: Optional[str] = None
+    updateDate: Optional[str] = None
     manufacturer: Optional[str] = None
     xCord: Optional[float] = None
     yCord: Optional[float] = None
-    mapId: Optional[Union[int, None]] = None  # Явно разрешаем None для очистки поля
+    mapId: Optional[int] = None
+
 
 class CategoryCreate(BaseModel):
     name: str

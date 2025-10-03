@@ -10,13 +10,15 @@ interface FilterProps {
   onCategoryChange: (categoryId: number | null) => void;
   onEquipmentCategoryChange: (categoryName: string | null) => void;
   onFloorChange: (floor: string | null) => void;
+  onAddEquipment: () => void;
 }
 
 export const Filter: React.FC<FilterProps> = ({ 
   onSearch, 
   onCategoryChange, 
   onEquipmentCategoryChange,
-  onFloorChange 
+  onFloorChange,
+  onAddEquipment
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -62,10 +64,13 @@ export const Filter: React.FC<FilterProps> = ({
 
   return (
     <Container>
-      <Search value={searchTerm} onChange={handleSearchChange} />
+      <SearchContainer>
+        <Search value={searchTerm} onChange={handleSearchChange} />
+      </SearchContainer>
       
       <FilterSection>
         <FilterButton onClick={() => setIsFilterOpen(!isFilterOpen)}>
+          <FilterIcon />
           Фильтры {hasActiveFilters && <ActiveIndicator />}
           <Arrow isOpen={isFilterOpen}>▼</Arrow>
         </FilterButton>
@@ -100,16 +105,15 @@ export const Filter: React.FC<FilterProps> = ({
             </FilterGroup>
 
                    <FilterGroup>
-                     <FilterLabel>Место:</FilterLabel>
+                     <FilterLabel>Этаж:</FilterLabel>
                      <FilterSelect
                        value={selectedFloor || ''}
                        onChange={(e) => handleFloorChange(e.target.value || null)}
                      >
-                       <option value="">Все места</option>
-                       <option value="Admin Room">Admin Room</option>
-                       <option value="Server Room">Server Room</option>
-                       <option value="Office 1">Office 1</option>
-                       <option value="Office 2">Office 2</option>
+                       <option value="">Все этажи</option>
+                       <option value="2">2 этаж</option>
+                       <option value="3">3 этаж</option>
+                       <option value="4">4 этаж</option>
                      </FilterSelect>
                    </FilterGroup>
 
@@ -123,16 +127,27 @@ export const Filter: React.FC<FilterProps> = ({
       </FilterSection>
 
       <FileInteraction />
+
+      <AddEquipmentButton onClick={onAddEquipment}>
+        <AddIcon />
+        Добавить оборудование
+      </AddEquipmentButton>
     </Container>
   );
 };
 
 const Container = styled('div', {
   marginBottom: '32px',
-  display: 'grid',
-  gridTemplateColumns: '2fr 1fr 1fr',
+  display: 'flex',
+  alignItems: 'center',
   gap: '16px',
-  alignItems: 'start',
+  flexWrap: 'wrap',
+});
+
+const SearchContainer = styled('div', {
+  flex: '1',
+  minWidth: '300px',
+  maxWidth: '400px',
 });
 
 const FilterSection = styled('div', {
@@ -156,6 +171,11 @@ const FilterButton = styled('button', {
   '&:hover': {
     backgroundColor: '#f1f5f9',
     borderColor: '#cbd5e1',
+  },
+  
+  '& svg': {
+    width: '16px',
+    height: '16px',
   },
 });
 
@@ -240,3 +260,44 @@ const ClearButton = styled('button', {
     borderColor: '#9ca3af',
   },
 });
+
+const AddEquipmentButton = styled('button', {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  padding: '12px 24px',
+  backgroundColor: '#3b82f6',
+  border: 'none',
+  borderRadius: '6px',
+  fontSize: '14px',
+  fontWeight: '500',
+  color: 'white',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  
+  '&:hover': {
+    backgroundColor: '#2563eb',
+  },
+  
+  '&:active': {
+    transform: 'translateY(1px)',
+  },
+  
+  '& svg': {
+    width: '16px',
+    height: '16px',
+  },
+});
+
+const AddIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"/>
+    <line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+);
+
+const FilterIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="22,3 2,3 10,12.46 10,19 14,21 14,12.46"/>
+  </svg>
+);

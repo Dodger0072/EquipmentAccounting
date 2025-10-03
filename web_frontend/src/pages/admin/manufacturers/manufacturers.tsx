@@ -273,6 +273,7 @@ export const ManufacturersPage: React.FC = () => {
           </form>
         </ModalContent>
       </Modal>
+
     </Container>
   );
 };

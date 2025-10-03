@@ -67,6 +67,13 @@ class manufacturer(Base):
         await session.commit()
         return result.rowcount > 0
 
+    @classmethod
+    async def delete_manufacturers_by_category(cls, session: AsyncSession, category_id: int) -> int:
+        """Delete all manufacturers by category."""
+        result = await session.execute(delete(cls).where(cls.category_id == category_id))
+        await session.commit()
+        return result.rowcount
+
     def to_dict(self) -> dict:
         """Convert manufacturer to dictionary."""
         return {

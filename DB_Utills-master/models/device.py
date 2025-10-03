@@ -83,6 +83,36 @@ class device(Base):
         _ = await session.execute(select(cls).where(cls.category == category))
         return _.scalars().all()
 
+    @classmethod
+    async def get_devices_by_manufacturer(cls, session: AsyncSession, manufacturer: str) -> Sequence['device']:
+        """
+        Get devices by manufacturer.
+        :param session: database session
+        :param manufacturer: manufacturer to filter devices by
+        :return: Sequence of devices from the specified manufacturer
+        """
+        _ = await session.execute(select(cls).where(cls.manufacturer == manufacturer))
+        return _.scalars().all()
+
+    def to_dict(self):
+        """Convert device instance to dictionary"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'category': self.category,
+            'place_id': self.place_id,
+            'version': self.version,
+            'releaseDate': self.releaseDate.isoformat() if self.releaseDate else None,
+            'softwareStartDate': self.softwareStartDate.isoformat() if self.softwareStartDate else None,
+            'softwareEndDate': self.softwareEndDate.isoformat() if self.softwareEndDate else None,
+            'updateDate': self.updateDate.isoformat() if self.updateDate else None,
+            'manufacturer': self.manufacturer,
+            'xCord': self.xCord,
+            'yCord': self.yCord,
+            'mapId': self.mapId,
+            'place': self.place_id  # Добавляем поле place для совместимости с фронтендом
+        }
+
     async def save(self, session: AsyncSession):
         session.add(self)
         await session.commit()

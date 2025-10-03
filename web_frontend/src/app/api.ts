@@ -1,6 +1,6 @@
 import { Equipment } from '@/shared/types/equipment';
 
-const backendUrl = 'http://127.0.0.1:8000';
+const backendUrl = 'http://localhost:8000';
 
 export async function searchEquipment() {
   const response = await fetch(`${backendUrl}/search`);
@@ -72,13 +72,35 @@ export async function updateCategory(id: number, data: Partial<Category>): Promi
 }
 
 export async function deleteCategory(id: number): Promise<void> {
-  const response = await fetch(`${backendUrl}/categories/${id}`, {
-    method: 'DELETE',
-  });
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Ошибка:', errorText);
-    throw new Error(`Ошибка удаления категории: ${errorText}`);
+  console.log('Attempting to delete category with id:', id);
+  
+  try {
+    const response = await fetch(`${backendUrl}/categories/${id}`, {
+      method: 'DELETE',
+    });
+    console.log('Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Ошибка:', errorData);
+      
+      // Если это ошибка с привязанными устройствами, бросаем специальную ошибку
+      if (response.status === 400 && errorData.detail && typeof errorData.detail === 'object' && errorData.detail.devices) {
+        console.log('Found devices in error response:', errorData.detail.devices);
+        const error = new Error(errorData.detail.message) as Error & { devices: any[] };
+        error.devices = errorData.detail.devices;
+        throw error;
+      }
+      
+      throw new Error(`Ошибка удаления категории: ${errorData.detail || 'Неизвестная ошибка'}`);
+    }
+  } catch (error) {
+    console.error('Fetch error:', error);
+    // Если это ошибка сети, бросаем её как есть
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Failed to fetch');
+    }
+    throw error;
   }
 }
 
@@ -144,4 +166,28 @@ export async function deleteManufacturer(id: number): Promise<void> {
     console.error('Ошибка:', errorText);
     throw new Error(`Ошибка удаления производителя: ${errorText}`);
   }
+}
+
+// API для работы с устройствами
+export async function deleteDevice(id: number): Promise<void> {
+  const response = await fetch(`${backendUrl}/delete_device/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Ошибка:', errorText);
+    throw new Error(`Ошибка удаления устройства: ${errorText}`);
+  }
+}
+
+export async function deleteDevicesByCategory(categoryId: number): Promise<{message: string, deleted_count: number}> {
+  const response = await fetch(`${backendUrl}/delete_devices_by_category/${categoryId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Ошибка:', errorText);
+    throw new Error(`Ошибка удаления устройств категории: ${errorText}`);
+  }
+  return (await response.json()) as {message: string, deleted_count: number};
 }

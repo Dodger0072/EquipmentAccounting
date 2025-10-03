@@ -2,29 +2,21 @@ import { Equipment as EquipmentType } from '@/shared/types';
 import { Text } from '@consta/uikit/Text';
 import { styled } from '@stitches/react';
 import { getType } from '@/shared/lib/get-type';
-import { useState } from 'react';
-import { AddEquipmentPopup } from '@/widgets/equipment-list/ui/organisms/euipment-popup';
 
 type EquipmentProps = {
     equipment: EquipmentType;
     displayNumber: number;
     onDelete: () => void;
-    onUpdate?: (equipment: EquipmentType) => void;
+    onEdit: () => void;
 };
 
-export const Equipment = ({ equipment, displayNumber, onDelete, onUpdate }: EquipmentProps) => {
+export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: EquipmentProps) => {
     const type = getType(equipment.softwareEndDate || '');
-    const [isEditOpen, setIsEditOpen] = useState(false);
-
-    const handleSumbit = (data: EquipmentType) => {
-        onUpdate?.(data);
-        setIsEditOpen(false);
-    }
     return (
         <EquipmentContainer type={type}>
             <ActionButtons>
                 <IconButton 
-                    onClick={() => setIsEditOpen(true)}
+                    onClick={onEdit}
                     title="Редактировать"
                 >
                     <EditIcon />
@@ -43,18 +35,12 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onUpdate }: Equi
             <Text>{equipment.softwareEndDate || 'Нет данных'}</Text>
             <Text>{equipment.manufacturer}</Text>
             <Text>{equipment.place_id}</Text>
-            {isEditOpen && (
-                <AddEquipmentPopup
-                    initialData={equipment}
-                    onSubmit={handleSumbit}
-                    onClose={() => setIsEditOpen(false)}
-                />
-            )}
         </EquipmentContainer>
     );
 };
 
 // SVG иконки
+
 const EditIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>

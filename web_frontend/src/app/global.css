@@ -353,3 +353,50 @@ template {
 * {
   box-sizing: border-box;
 }
+
+/* Стили для выпадающих списков Consta UI - обеспечение отображения поверх модальных окон */
+[data-popper-placement] {
+  z-index: 1001 !important;
+}
+
+.Select-Dropdown {
+  z-index: 1001 !important;
+}
+
+[role="listbox"] {
+  z-index: 1001 !important;
+}
+
+/* Дополнительные селекторы для Consta UI Select */
+.consta-Select-Dropdown {
+  z-index: 1001 !important;
+}
+
+.consta-Select-List {
+  z-index: 1001 !important;
+}
+
+/* Стили для порталов Consta UI */
+.consta-Select-Portal {
+  z-index: 1001 !important;
+}
+
+/* Дополнительные стили для модальных окон с Select */
+.modal-with-select {
+  position: relative;
+  z-index: 1000;
+}
+
+.modal-with-select .SelectField {
+  z-index: 1001;
+}
+
+/* Стили для всех выпадающих элементов в модальных окнах */
+.modal-with-select [data-popper-placement],
+.modal-with-select .Select-Dropdown,
+.modal-with-select [role="listbox"],
+.modal-with-select .consta-Select-Dropdown,
+.modal-with-select .consta-Select-List,
+.modal-with-select .consta-Select-Portal {
+  z-index: 1001 !important;
+}
