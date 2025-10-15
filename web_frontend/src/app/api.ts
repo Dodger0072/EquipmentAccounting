@@ -31,6 +31,7 @@ export interface Category {
   id: number;
   name: string;
   description?: string;
+  icon?: string; // ID иконки для отображения
 }
 
 export async function getCategories(): Promise<Category[]> {

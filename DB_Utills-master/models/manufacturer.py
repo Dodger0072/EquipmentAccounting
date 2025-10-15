@@ -10,7 +10,7 @@ class manufacturer(Base):
     __tablename__ = 'manufacturer'
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(100), nullable=False, unique=True)
+    name = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     category_id = Column(Integer, ForeignKey('category.id'), nullable=False)
     

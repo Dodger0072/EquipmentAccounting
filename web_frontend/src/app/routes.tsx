@@ -1,5 +1,5 @@
 
-import { EquipmentPage, LoginPage, MapPage, SiteSearch, AboutPage, AboutProjectPage, ContactsPage, FAQPage, HelpPage, SupportPage, CategoriesPage, ManufacturersPage} from '@/pages';
+import { EquipmentPage, MapPage, SiteSearch, AboutPage, AboutProjectPage, ContactsPage, FAQPage, HelpPage, SupportPage, CategoriesPage, ManufacturersPage} from '@/pages';
 
 export  interface Route {
   path: string;
@@ -9,20 +9,25 @@ export  interface Route {
 }
 
 export const routes: Route[] = [
-   {
+  {
     path: '/',
-    name: 'Авторизация',
-    element: <LoginPage/>
+    name: 'Оборудование',
+    element: <EquipmentPage />,
   },
   {
-        path: '/equipment',
-        name: 'Оборудование',
-        element: <EquipmentPage />,
-      },
+    path: '/equipment',
+    name: 'Оборудование',
+    element: <EquipmentPage />,
+  },
       {
         path: '/map',
         name: 'Карта',
         element: <MapPage />,
+      },
+      {
+        path: '/admin',
+        name: 'Администрирование',
+        element: <CategoriesPage />, // Заглушка для родительского маршрута
       },
       {
         path: '/admin/categories',

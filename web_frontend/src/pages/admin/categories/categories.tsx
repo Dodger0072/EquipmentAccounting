@@ -25,6 +25,7 @@ import {
   setSuccessMessage
 } from './model';
 import { Category } from '@/app/api';
+import { IconPicker } from '@/shared/ui/icon-picker';
 
 // Стили
 const Container = styled('div', {
@@ -194,7 +195,7 @@ const DeviceInfo = styled('div', {
 
 export const CategoriesPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({ name: '', description: '' });
+  const [formData, setFormData] = useState({ name: '', description: '', icon: 'default' });
   
   const [categories, isLoading, error, editingCategory, errorModalOpen, errorDevices, currentCategoryId, successMessage] = useUnit([
     $categories,
@@ -215,7 +216,8 @@ export const CategoriesPage: React.FC = () => {
     if (editingCategory) {
       setFormData({
         name: editingCategory.name,
-        description: editingCategory.description || ''
+        description: editingCategory.description || '',
+        icon: editingCategory.icon || 'default'
       });
       setIsModalOpen(true);
     }
@@ -234,7 +236,7 @@ export const CategoriesPage: React.FC = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingCategory(null);
-    setFormData({ name: '', description: '' });
+    setFormData({ name: '', description: '', icon: 'default' });
   };
 
   const handleEdit = (category: Category) => {
@@ -371,6 +373,11 @@ export const CategoriesPage: React.FC = () => {
                 rows={3}
               />
             </FormField>
+            
+            <IconPicker
+              selectedIcon={formData.icon}
+              onIconSelect={(iconId) => setFormData({ ...formData, icon: iconId })}
+            />
             
             <ButtonGroup>
               <Button type="submit" label="Сохранить" />

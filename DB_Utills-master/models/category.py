@@ -12,6 +12,7 @@ class category(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False, unique=True)
     description = Column(Text, nullable=True)
+    icon = Column(String(50), nullable=True, default='default')
     
     # Связь с производителями
     manufacturers = relationship("manufacturer", back_populates="category")
@@ -62,5 +63,6 @@ class category(Base):
         return {
             "id": self.id,
             "name": self.name,
-            "description": self.description
+            "description": self.description,
+            "icon": self.icon
         }

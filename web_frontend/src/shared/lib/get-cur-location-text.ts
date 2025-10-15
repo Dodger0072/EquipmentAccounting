@@ -18,6 +18,12 @@ export const getCurLocationText = (path: string) => {
         return 'Помощь'
     case '/help/support':
         return 'Помощь'
+    case '/admin':
+      return 'Администрирование'
+    case '/admin/categories':
+      return 'Администрирование'
+    case '/admin/manufacturers':
+      return 'Администрирование'
     default:
       return 'Оборудование';
   }

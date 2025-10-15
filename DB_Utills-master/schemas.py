@@ -34,15 +34,18 @@ class EquipmentUpdate(BaseModel):
 class CategoryCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    icon: Optional[str] = 'default'
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    icon: Optional[str] = None
 
 class CategoryResponse(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    icon: Optional[str] = None
 
 class ManufacturerCreate(BaseModel):
     name: str

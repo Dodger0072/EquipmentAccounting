@@ -50,7 +50,7 @@ async def options_handler(request: Request, path: str):
         }
     )
 
-@app.post("/add_place")
+@app.post("/add_place", tags=["оборудование"])
 async def add_place(place_data: dict):
     async with create_session() as db:
         existing = await db.execute(select(place).where(place.name == place_data["name"]))
@@ -65,7 +65,7 @@ async def add_place(place_data: dict):
         await db.refresh(new_place)
         return {"message": "Place added successfully", "id": new_place.id}
 
-@app.post("/add_device")
+@app.post("/add_device", tags=["оборудование"])
 async def add_device(equipment: EquipmentCreate):
     async with create_session() as db:
         existing = await db.execute(select(device).where(device.name == equipment.name))
@@ -126,17 +126,22 @@ async def add_device(equipment: EquipmentCreate):
             "mapId": new_device.mapId,
         }}
 
-@app.get("/search")
+@app.get("/search", tags=["оборудование"])
 async def search_devices():
     async with create_session() as db:
-        result = await db.execute(select(device))
-        devices = result.scalars().all()
+        # Делаем JOIN с таблицей категорий, чтобы получить иконку
+        result = await db.execute(
+            select(device, category)
+            .join(category, device.category == category.name)
+        )
+        devices_with_categories = result.all()
         
         return {
             "devices": [
                 {
                     "name": d.name, 
                     "category": d.category, 
+                    "categoryIcon": cat.icon if cat else 'default',  # Добавляем иконку категории
                     "xCord": d.xCord, 
                     "yCord": d.yCord,
                     "id": d.id,
@@ -149,11 +154,11 @@ async def search_devices():
                     "manufacturer": d.manufacturer,
                     "mapId": d.mapId,
                 } 
-                for d in devices
+                for d, cat in devices_with_categories
             ]
         }
 
-@app.delete("/delete_device/{device_id}")
+@app.delete("/delete_device/{device_id}", tags=["оборудование"])
 async def delete_device(device_id: int):
     async with create_session() as db:
         result = await db.execute(select(device).where(device.id == device_id))
@@ -167,7 +172,7 @@ async def delete_device(device_id: int):
         
         return {"message": f"Device {device_id} deleted successfully"}
 
-@app.delete("/delete_devices_by_category/{category_id}")
+@app.delete("/delete_devices_by_category/{category_id}", tags=["оборудование"])
 async def delete_devices_by_category(category_id: int):
     """Удалить все устройства категории"""
     async with create_session() as db:
@@ -194,7 +199,7 @@ async def delete_devices_by_category(category_id: int):
             "deleted_count": len(devices)
         }
 
-@app.put("/update_device/{device_id}")
+@app.put("/update_device/{device_id}", tags=["оборудование"])
 async def update_device(device_id: int, equipment: EquipmentUpdate):
     async with create_session() as db:
         result = await db.execute(select(device).where(device.id == device_id))
@@ -263,12 +268,6 @@ async def update_device(device_id: int, equipment: EquipmentUpdate):
             "mapId": updated_device.mapId,
         }}
 
-
-@app.post("/login")
-def login(credentials: dict):
-    if credentials.get("username") == "admin" and credentials.get("password") == "12345":
-        return {"token": "my-secret-jwt"}
-    raise HTTPException(status_code=401, detail="Invalid credentials")
 
 # API endpoints для категорий
 @app.get("/categories", tags=["Категории"])
@@ -383,10 +382,7 @@ async def create_manufacturer(manufacturer_data: ManufacturerCreate):
         if not existing_category:
             raise HTTPException(status_code=404, detail="Category not found")
         
-        # Проверяем, существует ли производитель с таким именем
-        existing = await manufacturer.get_manufacturer_by_name(db, manufacturer_data.name)
-        if existing:
-            raise HTTPException(status_code=400, detail="Manufacturer with this name already exists")
+        # Убрана проверка уникальности названия - производители могут иметь одинаковые названия в разных категориях
         
         new_manufacturer = await manufacturer.insert_manufacturer(db, manufacturer_data.model_dump())
         return new_manufacturer.to_dict()
@@ -415,11 +411,7 @@ async def update_manufacturer(manufacturer_id: int, manufacturer_data: Manufactu
             if not category_check:
                 raise HTTPException(status_code=404, detail="Category not found")
         
-        # Если обновляется имя, проверяем уникальность
-        if manufacturer_data.name and manufacturer_data.name != existing.name:
-            name_check = await manufacturer.get_manufacturer_by_name(db, manufacturer_data.name)
-            if name_check:
-                raise HTTPException(status_code=400, detail="Manufacturer with this name already exists")
+        # Убрана проверка уникальности названия - производители могут иметь одинаковые названия в разных категориях
         
         # Обновляем только переданные поля
         update_data = {k: v for k, v in manufacturer_data.model_dump().items() if v is not None}

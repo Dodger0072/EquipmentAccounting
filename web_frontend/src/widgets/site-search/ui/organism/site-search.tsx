@@ -10,19 +10,35 @@ interface Route {
 }
 
 const getAllRoutes = (routeArray: { path: string; name: string; children?: any[] }[]): Route[] => {
-  return routeArray.flatMap((route) => {
+  const routes: Route[] = [];
+  let adminParentAdded = false;
+  
+  routeArray.forEach((route) => {
     const routeName = route.name;
+    
+    // Обработка маршрутов с детьми
     if (route.children) {
-      return [
-        { name: routeName, path: route.path },
-        ...getAllRoutes(route.children).map((child) => ({
-          ...child,
-          parent: routeName,
-        })),
-      ];
+      routes.push({ name: routeName, path: route.path });
+      route.children.forEach((child) => {
+        routes.push({ name: child.name, path: child.path, parent: routeName });
+      });
+    } 
+    // Специальная обработка для админских маршрутов
+    else if (route.path.startsWith('/admin/')) {
+      // Добавляем родительский маршрут только один раз
+      if (!adminParentAdded) {
+        routes.push({ name: 'Администрирование', path: '/admin' });
+        adminParentAdded = true;
+      }
+      routes.push({ name: route.name, path: route.path, parent: 'Администрирование' });
     }
-    return [{ name: routeName, path: route.path }];
+    // Обычные маршруты
+    else {
+      routes.push({ name: routeName, path: route.path });
+    }
   });
+  
+  return routes;
 };
 
 export const SiteSearchPage: React.FC = () => {

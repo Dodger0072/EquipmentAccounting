@@ -1,6 +1,7 @@
 export type Equipment = {
   name: string;
   category: string;
+  categoryIcon?: string; // Иконка категории
   place_id: string; // Название комнаты/помещения
   version: string;
   id: number;

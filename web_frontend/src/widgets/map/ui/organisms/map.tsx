@@ -5,8 +5,9 @@ import { useUnit } from 'effector-react';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 
-import { $place, $showRadius, $activeCategory } from '../../model';
+import { $place, $activeCategory } from '../../model';
 import { EquipmentItem } from '../atoms';
+import { EquipmentPopup } from '../atoms/equipment-popup';
 
 export const Map = () => {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
@@ -14,9 +15,8 @@ export const Map = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [place, showRadius, activeCategory] = useUnit([
+  const [place, activeCategory] = useUnit([
     $place,
-    $showRadius,
     $activeCategory,
   ]);
 
@@ -53,11 +53,11 @@ export const Map = () => {
   }, [place, activeCategory]);
 
   const handleEquipmentClick = (equipment: Equipment) => {
-    if (equipment.id === activeItem?.id) {
-      setActiveItem(null);
-    } else {
-      setActiveItem(equipment);
-    }
+    setActiveItem(equipment);
+  };
+
+  const handleClosePopup = () => {
+    setActiveItem(null);
   };
 
   if (loading) {
@@ -75,19 +75,16 @@ export const Map = () => {
         {equipment.map((equipment) => (
           <EquipmentItem
             key={equipment.id}
-            showRadius={showRadius || equipment.id === activeItem?.id}
             equipment={equipment}
             onClick={() => handleEquipmentClick(equipment)}
           />
         ))}
       </MapContainer>
 
-      {activeItem && (
-        <div>
-          <StyledText align="center">{activeItem.name}</StyledText>
-          <StyledText align="center">{activeItem.softwareEndDate}</StyledText>
-        </div>
-      )}
+      <EquipmentPopup 
+        equipment={activeItem} 
+        onClose={handleClosePopup} 
+      />
     </div>
   );
 };

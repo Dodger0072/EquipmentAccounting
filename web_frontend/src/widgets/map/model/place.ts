@@ -16,17 +16,17 @@ export const fetchPlacesFx = createEffect(async () => {
         {
           id: 2,
           label: 'Этаж 2',
-          mapUrl: '/maps/map2.png',
+          mapUrl: '/maps/map1.jpg',
         },
         {
           id: 3,
           label: 'Этаж 3',
-          mapUrl: '/maps/map3.png',
+          mapUrl: '/maps/map2.jpg',
         },
         {
           id: 4,
           label: 'Этаж 4',
-          mapUrl: '/maps/map1.png',
+          mapUrl: '/maps/map3.jpg',
         },
       ]);
     }, 100);
