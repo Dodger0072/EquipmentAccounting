@@ -2,6 +2,7 @@ import { Equipment as EquipmentType } from '@/shared/types';
 import { Text } from '@consta/uikit/Text';
 import { styled } from '@stitches/react';
 import { getType } from '@/shared/lib/get-type';
+import { getEquipmentQRCodeUrl } from '@/app/api';
 
 type EquipmentProps = {
     equipment: EquipmentType;
@@ -45,6 +46,74 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: Equipm
     // Время отклика из актуального статуса или из конфигурации
     const responseTime = equipment.snmp_status?.response_time || equipment.snmp_config?.response_time;
     
+    const handlePrintQR = () => {
+        const qrUrl = getEquipmentQRCodeUrl(equipment.id);
+        
+        // Создаем новое окно для печати QR кода
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+        
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>QR код - ${equipment.name}</title>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        min-height: 100vh;
+                        margin: 0;
+                        padding: 20px;
+                    }
+                    .qr-container {
+                        text-align: center;
+                    }
+                    .qr-code {
+                        margin: 20px 0;
+                    }
+                    .equipment-name {
+                        font-size: 18px;
+                        font-weight: bold;
+                        margin-bottom: 10px;
+                    }
+                    .equipment-id {
+                        font-size: 14px;
+                        color: #666;
+                        margin-top: 10px;
+                    }
+                    @media print {
+                        body {
+                            margin: 0;
+                        }
+                        @page {
+                            margin: 20mm;
+                        }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="qr-container">
+                    <div class="equipment-name">${equipment.name}</div>
+                    <div class="qr-code">
+                        <img src="${qrUrl}" alt="QR код" style="max-width: 300px; height: auto;" />
+                    </div>
+                    <div class="equipment-id">ID: ${equipment.id}</div>
+                </div>
+                <script>
+                    window.onload = function() {
+                        window.print();
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
+    
     return (
         <EquipmentContainer type={type}>
             <ActionButtons>
@@ -59,6 +128,12 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: Equipm
                     title="Удалить"
                 >
                     <DeleteIcon />
+                </IconButton>
+                <IconButton 
+                    onClick={handlePrintQR}
+                    title="Печать QR кода"
+                >
+                    <QRIcon />
                 </IconButton>
             </ActionButtons>
             <Text>{displayNumber}</Text>
@@ -95,6 +170,20 @@ const DeleteIcon = () => (
         <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"/>
         <line x1="10" y1="11" x2="10" y2="17"/>
         <line x1="14" y1="11" x2="14" y2="17"/>
+    </svg>
+);
+
+const QRIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="5" height="5"/>
+        <rect x="16" y="3" width="5" height="5"/>
+        <rect x="3" y="16" width="5" height="5"/>
+        <line x1="5.5" y1="8.5" x2="5.5" y2="15.5"/>
+        <line x1="18.5" y1="8.5" x2="18.5" y2="15.5"/>
+        <line x1="8.5" y1="5.5" x2="15.5" y2="5.5"/>
+        <line x1="8.5" y1="18.5" x2="15.5" y2="18.5"/>
+        <rect x="16" y="16" width="3" height="3"/>
+        <line x1="12" y1="12" x2="12" y2="12.01"/>
     </svg>
 );
 

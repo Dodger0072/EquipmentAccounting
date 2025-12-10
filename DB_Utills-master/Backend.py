@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
 from models.device import device
@@ -13,6 +13,8 @@ from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import asyncio
+import qrcode
+import io
 try:
     from services.snmp_service import SNMPService
     SNMP_AVAILABLE = True
@@ -135,6 +137,96 @@ async def add_device(equipment: EquipmentCreate):
             "manufacturer": new_device.manufacturer,
             "mapId": new_device.mapId,
         }}
+
+@app.get("/equipment/{device_id}", tags=["оборудование"])
+async def get_device_by_id(device_id: int):
+    """Получить информацию об оборудовании по ID"""
+    async with create_session() as db:
+        # Сначала проверяем существование устройства
+        device_result = await db.execute(select(device).where(device.id == device_id))
+        d = device_result.scalar_one_or_none()
+        
+        if not d:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        # Получаем категорию если она есть
+        cat = None
+        if d.category:
+            category_result = await db.execute(select(category).where(category.name == d.category))
+            cat = category_result.scalar_one_or_none()
+        
+        # Получаем SNMP конфигурацию
+        snmp_config = await DeviceSNMPConfig.get_by_device_id(db, d.id)
+        
+        device_dict = {
+            "name": d.name, 
+            "category": d.category, 
+            "categoryIcon": cat.icon if cat else 'default',
+            "xCord": d.xCord, 
+            "yCord": d.yCord,
+            "id": d.id,
+            "place_id": d.place_id,
+            "version": d.version,
+            "releaseDate": d.releaseDate.isoformat() if d.releaseDate else None,
+            "softwareStartDate": d.softwareStartDate.isoformat() if d.softwareStartDate else None,
+            "softwareEndDate": d.softwareEndDate.isoformat() if d.softwareEndDate else None,
+            "updateDate": d.updateDate.isoformat() if d.updateDate else None,
+            "manufacturer": d.manufacturer,
+            "mapId": d.mapId,
+        }
+        
+        # Добавляем SNMP конфигурацию если есть
+        if snmp_config:
+            snmp_config_dict = snmp_config.to_dict()
+            device_dict["snmp_config"] = snmp_config_dict
+            if snmp_config.status:
+                device_dict["snmp_status"] = {
+                    "status": snmp_config.status,
+                    "message": f"Last check: {snmp_config.last_check.isoformat() if snmp_config.last_check else 'Never'}",
+                    "response_time": snmp_config.response_time,
+                    "timestamp": snmp_config.last_check.isoformat() if snmp_config.last_check else None
+                }
+        
+        return device_dict
+
+@app.get("/equipment/{device_id}/qr", tags=["оборудование"])
+async def get_device_qr_code(device_id: int):
+    """Генерирует QR код для оборудования"""
+    async with create_session() as db:
+        result = await db.execute(select(device).where(device.id == device_id))
+        db_device = result.scalar_one_or_none()
+        
+        if not db_device:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        # Создаем URL для QR кода
+        # В продакшене нужно будет заменить на реальный домен
+        frontend_url = "http://localhost:5173"  # Можно вынести в конфиг
+        qr_url = f"{frontend_url}/equipment/{device_id}"
+        
+        # Генерируем QR код
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_url)
+        qr.make(fit=True)
+        
+        # Создаем изображение
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Сохраняем в байтовый поток
+        img_byte_arr = io.BytesIO()
+        img.save(img_byte_arr, format='PNG')
+        img_byte_arr.seek(0)
+        
+        return StreamingResponse(
+            io.BytesIO(img_byte_arr.read()),
+            media_type="image/png",
+            headers={"Content-Disposition": f"inline; filename=qr_{device_id}.png"}
+        )
 
 @app.get("/search", tags=["оборудование"])
 async def search_devices():

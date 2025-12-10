@@ -242,3 +242,18 @@ export async function getSNMPStatusSummary(): Promise<{
   }
   return (await response.json());
 }
+
+// API для получения оборудования по ID
+export async function getEquipmentById(id: number): Promise<Equipment> {
+  const response = await fetch(`${backendUrl}/equipment/${id}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка загрузки оборудования: ${errorText}`);
+  }
+  return (await response.json()) as Equipment;
+}
+
+// API для получения QR кода оборудования
+export function getEquipmentQRCodeUrl(id: number): string {
+  return `${backendUrl}/equipment/${id}/qr`;
+}

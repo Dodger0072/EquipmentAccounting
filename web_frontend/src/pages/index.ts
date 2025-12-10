@@ -1,5 +1,6 @@
 export * from './home';
 export * from './equipment';
+export * from './equipment/view';
 export * from './map';
 export * from './site-search'
 export * from './about';

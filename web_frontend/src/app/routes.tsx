@@ -1,5 +1,5 @@
 
-import { EquipmentPage, MapPage, SiteSearch, AboutPage, AboutProjectPage, ContactsPage, FAQPage, HelpPage, SupportPage, CategoriesPage, ManufacturersPage} from '@/pages';
+import { EquipmentPage, EquipmentViewPage, MapPage, SiteSearch, AboutPage, AboutProjectPage, ContactsPage, FAQPage, HelpPage, SupportPage, CategoriesPage, ManufacturersPage} from '@/pages';
 
 export  interface Route {
   path: string;
@@ -18,6 +18,11 @@ export const routes: Route[] = [
     path: '/equipment',
     name: 'Оборудование',
     element: <EquipmentPage />,
+  },
+  {
+    path: '/equipment/:id',
+    name: 'Просмотр оборудования',
+    element: <EquipmentViewPage />,
   },
       {
         path: '/map',
