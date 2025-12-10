@@ -24,6 +24,9 @@ class device(Base):
     mapId = Column(Integer)
 
     # answers: Mapped[list[Answer]] = relationship(lazy="selectin")
+    
+    # Связь с SNMP конфигурацией
+    snmp_config = relationship("DeviceSNMPConfig", back_populates="device", uselist=False)
 
     @classmethod
     async def insert_device(cls, session: AsyncSession, device_data: dict) -> 'device':
@@ -96,7 +99,7 @@ class device(Base):
 
     def to_dict(self):
         """Convert device instance to dictionary"""
-        return {
+        result = {
             'id': self.id,
             'name': self.name,
             'category': self.category,
@@ -110,8 +113,16 @@ class device(Base):
             'xCord': self.xCord,
             'yCord': self.yCord,
             'mapId': self.mapId,
-            'place': self.place_id  # Добавляем поле place для совместимости с фронтендом
+            'place': self.place_id,  # Добавляем поле place для совместимости с фронтендом
         }
+        
+        # Добавляем SNMP конфигурацию если она есть
+        if hasattr(self, 'snmp_config') and self.snmp_config:
+            result['snmp_config'] = self.snmp_config.to_dict()
+        else:
+            result['snmp_config'] = None
+            
+        return result
 
     async def save(self, session: AsyncSession):
         session.add(self)

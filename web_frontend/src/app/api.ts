@@ -192,3 +192,53 @@ export async function deleteDevicesByCategory(categoryId: number): Promise<{mess
   }
   return (await response.json()) as {message: string, deleted_count: number};
 }
+
+// API для работы с SNMP
+import { SNMPConfig, SNMPStatus } from '@/shared/types/equipment';
+
+export async function checkSNMPStatus(deviceId: number): Promise<SNMPStatus> {
+  const response = await fetch(`${backendUrl}/snmp/check/${deviceId}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка проверки SNMP: ${errorText}`);
+  }
+  return (await response.json()) as SNMPStatus;
+}
+
+export async function checkAllSNMPDevices(): Promise<{message: string, results: Record<string, SNMPStatus>}> {
+  const response = await fetch(`${backendUrl}/snmp/check-all`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка проверки всех устройств: ${errorText}`);
+  }
+  return (await response.json()) as {message: string, results: Record<string, SNMPStatus>};
+}
+
+export async function addSNMPConfig(config: Omit<SNMPConfig, 'id'>): Promise<{message: string, config: SNMPConfig}> {
+  const response = await fetch(`${backendUrl}/snmp/config`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(config),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка добавления SNMP конфигурации: ${errorText}`);
+  }
+  return (await response.json()) as {message: string, config: SNMPConfig};
+}
+
+export async function getSNMPStatusSummary(): Promise<{
+  total_devices: number;
+  snmp_enabled: number;
+  snmp_status: { up: number; down: number; unknown: number };
+  snmp_coverage: number;
+}> {
+  const response = await fetch(`${backendUrl}/snmp/status`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка получения статистики SNMP: ${errorText}`);
+  }
+  return (await response.json());
+}

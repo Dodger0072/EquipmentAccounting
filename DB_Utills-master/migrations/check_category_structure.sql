@@ -11,3 +11,7 @@ FROM information_schema.columns
 WHERE table_name = 'category' 
 ORDER BY ordinal_position;
 
+
+
+
+

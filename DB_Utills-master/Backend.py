@@ -13,6 +13,16 @@ from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import asyncio
+try:
+    from services.snmp_service import SNMPService
+    SNMP_AVAILABLE = True
+except ImportError as e:
+    SNMP_AVAILABLE = False
+    print(f"WARNING: SNMP service not available: {e}")
+    SNMPService = None
+
+from models.device_snmp_config import DeviceSNMPConfig
+from sqlalchemy import select
 
 
 # Инициализация базы данных при запуске
@@ -136,26 +146,45 @@ async def search_devices():
         )
         devices_with_categories = result.all()
         
+        devices_list = []
+        for d, cat in devices_with_categories:
+            # Получаем SNMP конфигурацию для каждого устройства
+            snmp_config = await DeviceSNMPConfig.get_by_device_id(db, d.id)
+            
+            device_dict = {
+                "name": d.name, 
+                "category": d.category, 
+                "categoryIcon": cat.icon if cat else 'default',  # Добавляем иконку категории
+                "xCord": d.xCord, 
+                "yCord": d.yCord,
+                "id": d.id,
+                "place_id": d.place_id,
+                "version": d.version,
+                "releaseDate": d.releaseDate.isoformat() if d.releaseDate else None,
+                "softwareStartDate": d.softwareStartDate.isoformat() if d.softwareStartDate else None,
+                "softwareEndDate": d.softwareEndDate.isoformat() if d.softwareEndDate else None,
+                "updateDate": d.updateDate.isoformat() if d.updateDate else None,
+                "manufacturer": d.manufacturer,
+                "mapId": d.mapId,
+            }
+            
+            # Добавляем SNMP конфигурацию если есть
+            if snmp_config:
+                snmp_config_dict = snmp_config.to_dict()
+                device_dict["snmp_config"] = snmp_config_dict
+                # Также добавляем статус как отдельное поле для удобства
+                if snmp_config.status:
+                    device_dict["snmp_status"] = {
+                        "status": snmp_config.status,
+                        "message": f"Last check: {snmp_config.last_check.isoformat() if snmp_config.last_check else 'Never'}",
+                        "response_time": snmp_config.response_time,
+                        "timestamp": snmp_config.last_check.isoformat() if snmp_config.last_check else None
+                    }
+            
+            devices_list.append(device_dict)
+        
         return {
-            "devices": [
-                {
-                    "name": d.name, 
-                    "category": d.category, 
-                    "categoryIcon": cat.icon if cat else 'default',  # Добавляем иконку категории
-                    "xCord": d.xCord, 
-                    "yCord": d.yCord,
-                    "id": d.id,
-                    "place_id": d.place_id,
-                    "version": d.version,
-                    "releaseDate": d.releaseDate.isoformat() if d.releaseDate else None,
-                    "softwareStartDate": d.softwareStartDate.isoformat() if d.softwareStartDate else None,
-                    "softwareEndDate": d.softwareEndDate.isoformat() if d.softwareEndDate else None,
-                    "updateDate": d.updateDate.isoformat() if d.updateDate else None,
-                    "manufacturer": d.manufacturer,
-                    "mapId": d.mapId,
-                } 
-                for d, cat in devices_with_categories
-            ]
+            "devices": devices_list
         }
 
 @app.delete("/delete_device/{device_id}", tags=["оборудование"])
@@ -443,6 +472,236 @@ async def delete_manufacturer(manufacturer_id: int):
             raise HTTPException(status_code=500, detail="Failed to delete manufacturer")
         
         return {"message": f"Manufacturer {manufacturer_id} deleted successfully"}
+
+# SNMP Monitoring Endpoints
+snmp_service = SNMPService() if SNMP_AVAILABLE else None
+
+@app.get("/snmp/check/{device_id}", tags=["SNMP Monitoring"])
+async def check_device_snmp(device_id: int, db: AsyncSession = Depends(create_session)):
+    """Проверяет статус конкретного устройства через SNMP"""
+    if not SNMP_AVAILABLE or not snmp_service:
+        raise HTTPException(status_code=503, detail="SNMP service is not available. Install pysnmp: pip install pysnmp")
+    try:
+        # Получаем устройство из базы данных
+        device_obj = await device.get_device_by_id(db, device_id)
+        if not device_obj:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        # Получаем SNMP конфигурацию
+        snmp_config = await DeviceSNMPConfig.get_by_device_id(db, device_id)
+        if not snmp_config:
+            raise HTTPException(status_code=404, detail="SNMP configuration not found for this device")
+        
+        if not snmp_config.enabled:
+            return {
+                'status': 'disabled',
+                'message': 'SNMP monitoring is disabled for this device',
+                'response_time': None,
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        # Преобразуем в словарь для SNMP сервиса
+        device_config = {
+            'snmp_enabled': 'true',
+            'snmp_ip': snmp_config.ip_address,
+            'snmp_port': snmp_config.port,
+            'snmp_community': snmp_config.community,
+            'snmp_version': snmp_config.version,
+            'snmp_username': snmp_config.username,
+            'snmp_password': snmp_config.password,
+            'snmp_auth_protocol': snmp_config.auth_protocol,
+            'snmp_priv_protocol': snmp_config.priv_protocol
+        }
+        
+        # Выполняем SNMP проверку
+        result = await snmp_service.check_device_status(device_config)
+        
+        # Обновляем статус в базе данных для всех статусов кроме 'disabled'
+        if result['status'] in ['up', 'down', 'error']:
+            snmp_config.status = result['status']
+            snmp_config.response_time = result.get('response_time')
+            snmp_config.last_check = datetime.now()
+            await db.commit()
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SNMP check failed: {str(e)}")
+
+@app.get("/snmp/check-all", tags=["SNMP Monitoring"])
+async def check_all_devices_snmp(db: AsyncSession = Depends(create_session)):
+    """Проверяет статус всех устройств с включенным SNMP мониторингом"""
+    if not SNMP_AVAILABLE or not snmp_service:
+        raise HTTPException(status_code=503, detail="SNMP service is not available")
+    try:
+        # Получаем все включенные SNMP конфигурации
+        snmp_configs = await DeviceSNMPConfig.get_all_enabled(db)
+        
+        if not snmp_configs:
+            return {"message": "No devices with SNMP monitoring enabled", "results": {}}
+        
+        # Преобразуем в конфигурации для SNMP сервиса
+        device_configs = []
+        config_map = {}  # для связи device_id с конфигурацией
+        
+        for snmp_config in snmp_configs:
+            device_config = {
+                'id': snmp_config.device_id,
+                'snmp_enabled': 'true',
+                'snmp_ip': snmp_config.ip_address,
+                'snmp_port': snmp_config.port,
+                'snmp_community': snmp_config.community,
+                'snmp_version': snmp_config.version,
+                'snmp_username': snmp_config.username,
+                'snmp_password': snmp_config.password,
+                'snmp_auth_protocol': snmp_config.auth_protocol,
+                'snmp_priv_protocol': snmp_config.priv_protocol
+            }
+            device_configs.append(device_config)
+            config_map[snmp_config.device_id] = snmp_config
+        
+        # Выполняем массовую проверку
+        results = await snmp_service.bulk_check_devices(device_configs)
+        
+        # Обновляем статусы в базе данных
+        for device_id, result in results.items():
+            if device_id in config_map and result['status'] in ['up', 'down', 'error']:
+                snmp_config = config_map[device_id]
+                snmp_config.status = result['status']
+                snmp_config.response_time = result.get('response_time')
+                snmp_config.last_check = datetime.now()
+        
+        await db.commit()
+        
+        return {
+            "message": f"Checked {len(snmp_configs)} devices",
+            "results": results
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Bulk SNMP check failed: {str(e)}")
+
+@app.get("/snmp/interfaces/{device_id}", tags=["SNMP Monitoring"])
+async def get_device_interfaces(device_id: int, db: AsyncSession = Depends(create_session)):
+    """Получает информацию об интерфейсах устройства"""
+    if not SNMP_AVAILABLE or not snmp_service:
+        raise HTTPException(status_code=503, detail="SNMP service is not available")
+    try:
+        # Получаем устройство из базы данных
+        device_obj = await device.get_device_by_id(db, device_id)
+        if not device_obj:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        # Получаем SNMP конфигурацию
+        snmp_config = await DeviceSNMPConfig.get_by_device_id(db, device_id)
+        if not snmp_config or not snmp_config.enabled:
+            raise HTTPException(status_code=400, detail="SNMP monitoring not enabled for this device")
+        
+        # Преобразуем в словарь для SNMP сервиса
+        device_config = {
+            'snmp_enabled': 'true',
+            'snmp_ip': snmp_config.ip_address,
+            'snmp_port': snmp_config.port,
+            'snmp_community': snmp_config.community,
+            'snmp_version': snmp_config.version,
+            'snmp_username': snmp_config.username,
+            'snmp_password': snmp_config.password,
+            'snmp_auth_protocol': snmp_config.auth_protocol,
+            'snmp_priv_protocol': snmp_config.priv_protocol
+        }
+        
+        # Получаем информацию об интерфейсах
+        result = await snmp_service.get_interface_status(device_config)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get interface status: {str(e)}")
+
+@app.post("/snmp/config", tags=["SNMP Monitoring"])
+async def create_or_update_snmp_config(snmp_config_data: dict, db: AsyncSession = Depends(create_session)):
+    """Создает или обновляет SNMP конфигурацию устройства"""
+    try:
+        # Валидируем обязательные поля
+        if 'device_id' not in snmp_config_data:
+            raise HTTPException(status_code=400, detail="Missing required field: device_id")
+        if 'ip_address' not in snmp_config_data:
+            raise HTTPException(status_code=400, detail="Missing required field: ip_address")
+        
+        device_id = snmp_config_data['device_id']
+        
+        # Проверяем, что устройство существует
+        device_obj = await device.get_device_by_id(db, device_id)
+        if not device_obj:
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        # Подготавливаем данные для конфигурации
+        config_data = {
+            'enabled': snmp_config_data.get('enabled', True),
+            'ip_address': snmp_config_data['ip_address'],
+            'port': snmp_config_data.get('port', 161),
+            'community': snmp_config_data.get('community', 'public'),
+            'version': snmp_config_data.get('version', '2c'),
+            'username': snmp_config_data.get('username'),
+            'password': snmp_config_data.get('password'),
+            'auth_protocol': snmp_config_data.get('auth_protocol', 'MD5'),
+            'priv_protocol': snmp_config_data.get('priv_protocol', 'DES'),
+            'timeout': snmp_config_data.get('timeout', 5),
+            'retries': snmp_config_data.get('retries', 2),
+            'check_interval': snmp_config_data.get('check_interval', 300)
+        }
+        
+        # Удаляем None значения
+        config_data = {k: v for k, v in config_data.items() if v is not None}
+        
+        # Создаем или обновляем конфигурацию
+        snmp_config = await DeviceSNMPConfig.create_or_update(db, device_id, config_data)
+        
+        return {
+            "message": "SNMP configuration created/updated successfully",
+            "config": snmp_config.to_dict()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update SNMP config: {str(e)}")
+
+@app.get("/snmp/status", tags=["SNMP Monitoring"])
+async def get_snmp_status_summary(db: AsyncSession = Depends(create_session)):
+    """Получает сводку по статусу SNMP мониторинга"""
+    try:
+        # Получаем все устройства
+        devices = await device.get_all_devices(db)
+        total_devices = len(devices)
+        
+        # Получаем все SNMP конфигурации
+        result = await db.execute(select(DeviceSNMPConfig))
+        all_snmp_configs = result.scalars().all()
+        
+        # Подсчитываем статистику
+        snmp_enabled = len([c for c in all_snmp_configs if c.enabled])
+        snmp_up = len([c for c in all_snmp_configs if c.status == 'up'])
+        snmp_down = len([c for c in all_snmp_configs if c.status == 'down'])
+        snmp_unknown = len([c for c in all_snmp_configs if c.status == 'unknown' or c.status is None])
+        
+        return {
+            "total_devices": total_devices,
+            "snmp_enabled": snmp_enabled,
+            "snmp_status": {
+                "up": snmp_up,
+                "down": snmp_down,
+                "unknown": snmp_unknown
+            },
+            "snmp_coverage": round((snmp_enabled / total_devices * 100) if total_devices > 0 else 0, 2)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get SNMP status: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

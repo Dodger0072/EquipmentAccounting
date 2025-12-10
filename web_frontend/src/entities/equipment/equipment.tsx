@@ -10,8 +10,41 @@ type EquipmentProps = {
     onEdit: () => void;
 };
 
+const getSNMPStatusColor = (status?: string) => {
+    switch (status) {
+        case 'up':
+            return '#10b981'; // green
+        case 'down':
+            return '#ef4444'; // red
+        case 'disabled':
+            return '#6b7280'; // gray
+        default:
+            return '#f59e0b'; // yellow/orange for unknown
+    }
+};
+
+const getSNMPStatusText = (status?: string) => {
+    switch (status) {
+        case 'up':
+            return 'Работает';
+        case 'down':
+        case 'error':
+            return 'Не отвечает';
+        case 'disabled':
+            return 'Отключен';
+        default:
+            return 'Неизвестно';
+    }
+};
+
 export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: EquipmentProps) => {
     const type = getType(equipment.softwareEndDate || '');
+    // Приоритет: сначала snmp_status (актуальный), потом snmp_config.status (из базы)
+    const snmpStatus = equipment.snmp_status?.status || equipment.snmp_config?.status || 'unknown';
+    const hasSNMP = equipment.snmp_config?.enabled;
+    // Время отклика из актуального статуса или из конфигурации
+    const responseTime = equipment.snmp_status?.response_time || equipment.snmp_config?.response_time;
+    
     return (
         <EquipmentContainer type={type}>
             <ActionButtons>
@@ -29,7 +62,15 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: Equipm
                 </IconButton>
             </ActionButtons>
             <Text>{displayNumber}</Text>
-            <Text>{equipment.name}</Text>
+            <NameContainer>
+                <Text>{equipment.name}</Text>
+                {hasSNMP && (
+                    <SNMPStatusDot 
+                        status={snmpStatus}
+                        title={`${getSNMPStatusText(snmpStatus)}${responseTime ? ` (${Math.round(responseTime)}ms)` : ''}`}
+                    />
+                )}
+            </NameContainer>
             <Text>{equipment.releaseDate ? equipment.releaseDate : 'Нет данных'}</Text>
             <Text>{equipment.softwareStartDate || 'Нет данных'}</Text>
             <Text>{equipment.softwareEndDate || 'Нет данных'}</Text>
@@ -74,6 +115,48 @@ const EquipmentContainer = styled('div', {
                 backgroundColor: 'rgba(220, 38, 38, 0.14)',
             },
         },
+    },
+});
+
+const NameContainer = styled('div', {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+});
+
+const SNMPStatusDot = styled('div', {
+    width: '12px',
+    height: '12px',
+    borderRadius: '50%',
+    cursor: 'help',
+    transition: 'transform 0.2s ease',
+    '&:hover': {
+        transform: 'scale(1.2)',
+    },
+    variants: {
+        status: {
+            up: {
+                backgroundColor: '#10b981',
+                boxShadow: '0 0 4px rgba(16, 185, 129, 0.4)',
+            },
+            down: {
+                backgroundColor: '#ef4444',
+                boxShadow: '0 0 4px rgba(239, 68, 68, 0.4)',
+            },
+            error: {
+                backgroundColor: '#ef4444',
+                boxShadow: '0 0 4px rgba(239, 68, 68, 0.4)',
+            },
+            disabled: {
+                backgroundColor: '#6b7280',
+            },
+            unknown: {
+                backgroundColor: '#f59e0b',
+            },
+        },
+    },
+    defaultVariants: {
+        status: 'unknown',
     },
 });
 

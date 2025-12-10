@@ -20,3 +20,7 @@ ALTER TABLE manufacturer DROP CONSTRAINT IF EXISTS manufacturer_name_unique;
 SELECT constraint_name, constraint_type 
 FROM information_schema.table_constraints 
 WHERE table_name = 'manufacturer' AND constraint_type = 'UNIQUE';
+
+
+
+
