@@ -2,26 +2,14 @@ import { Equipment as EquipmentType } from '@/shared/types';
 import { Text } from '@consta/uikit/Text';
 import { styled } from '@stitches/react';
 import { getType } from '@/shared/lib/get-type';
-import { getEquipmentQRCodeUrl } from '@/app/api';
+import { ColumnKey, getGridTemplate } from '@/shared/config';
 
 type EquipmentProps = {
     equipment: EquipmentType;
     displayNumber: number;
     onDelete: () => void;
     onEdit: () => void;
-};
-
-const getSNMPStatusColor = (status?: string) => {
-    switch (status) {
-        case 'up':
-            return '#10b981'; // green
-        case 'down':
-            return '#ef4444'; // red
-        case 'disabled':
-            return '#6b7280'; // gray
-        default:
-            return '#f59e0b'; // yellow/orange for unknown
-    }
+    visibleColumns: ColumnKey[];
 };
 
 const getSNMPStatusText = (status?: string) => {
@@ -38,124 +26,42 @@ const getSNMPStatusText = (status?: string) => {
     }
 };
 
-export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: EquipmentProps) => {
+export const Equipment = ({ equipment, displayNumber, onDelete, onEdit, visibleColumns }: EquipmentProps) => {
     const type = getType(equipment.softwareEndDate || '');
-    const hasSNMP = equipment.snmp_config?.enabled === true; // Явно проверяем на true
-    // Приоритет: сначала snmp_status (актуальный), потом snmp_config.status (из базы)
-    // ВАЖНО: НЕ используем статус из snmp_config, если SNMP отключен или статус 'disabled'
-    // Используем только snmp_status из состояния или статус из базы, если он не 'disabled'
-    let snmpStatus: string | undefined = undefined;
+    const hasSNMP = equipment.snmp_config?.enabled === true;
+    let snmpStatus: 'up' | 'down' | 'unknown' | 'disabled' | 'error' | undefined = undefined;
     let responseTime: number | undefined = undefined;
     
     if (hasSNMP) {
-        // Используем актуальный статус из проверки
         if (equipment.snmp_status?.status && equipment.snmp_status.status !== 'disabled') {
             snmpStatus = equipment.snmp_status.status;
-            responseTime = equipment.snmp_status.response_time;
+            responseTime = equipment.snmp_status.response_time ?? undefined;
         } 
-        // Или статус из базы, но только если он не 'disabled' и не null/undefined
         else if (equipment.snmp_config?.status && 
                  equipment.snmp_config.status !== 'disabled' && 
                  equipment.snmp_config.status !== null && 
                  equipment.snmp_config.status !== undefined) {
             snmpStatus = equipment.snmp_config.status;
-            responseTime = equipment.snmp_config.response_time;
+            responseTime = equipment.snmp_config.response_time ?? undefined;
         }
-        // Если нет статуса, не показываем индикатор (snmpStatus остается undefined)
     }
     
-    const handlePrintQR = () => {
-        const qrUrl = getEquipmentQRCodeUrl(equipment.id);
-        
-        // Создаем новое окно для печати QR кода
-        const printWindow = window.open('', '_blank');
-        if (!printWindow) return;
-        
-        printWindow.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>QR код - ${equipment.name}</title>
-                <style>
-                    body {
-                        font-family: Arial, sans-serif;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        min-height: 100vh;
-                        margin: 0;
-                        padding: 20px;
-                    }
-                    .qr-container {
-                        text-align: center;
-                    }
-                    .qr-code {
-                        margin: 20px 0;
-                    }
-                    .equipment-name {
-                        font-size: 18px;
-                        font-weight: bold;
-                        margin-bottom: 10px;
-                    }
-                    .equipment-id {
-                        font-size: 14px;
-                        color: #666;
-                        margin-top: 10px;
-                    }
-                    @media print {
-                        body {
-                            margin: 0;
-                        }
-                        @page {
-                            margin: 20mm;
-                        }
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="qr-container">
-                    <div class="equipment-name">${equipment.name}</div>
-                    <div class="qr-code">
-                        <img src="${qrUrl}" alt="QR код" style="max-width: 300px; height: auto;" />
-                    </div>
-                    <div class="equipment-id">ID: ${equipment.id}</div>
-                </div>
-                <script>
-                    window.onload = function() {
-                        window.print();
-                    };
-                </script>
-            </body>
-            </html>
-        `);
-        printWindow.document.close();
-    };
-    
-    return (
-        <EquipmentContainer type={type}>
-            <ActionButtons>
-                <IconButton 
-                    onClick={onEdit}
-                    title="Редактировать"
-                >
+    const gridTemplate = getGridTemplate(visibleColumns);
+
+    const columnRenderers: Record<ColumnKey, () => React.ReactNode> = {
+        actions: () => (
+            <ActionButtons key="actions">
+                <IconButton onClick={onEdit} title="Редактировать">
                     <EditIcon />
                 </IconButton>
-                <IconButton 
-                    onClick={onDelete}
-                    title="Удалить"
-                >
+                <IconButton onClick={onDelete} title="Удалить">
                     <DeleteIcon />
                 </IconButton>
-                <IconButton 
-                    onClick={handlePrintQR}
-                    title="Печать QR кода"
-                >
-                    <QRIcon />
-                </IconButton>
             </ActionButtons>
-            <Text>{displayNumber}</Text>
-            <NameContainer>
+        ),
+        number: () => <Text key="number">{displayNumber}</Text>,
+        name: () => (
+            <NameContainer key="name">
                 <Text>{equipment.name}</Text>
                 {hasSNMP && snmpStatus && (
                     <SNMPStatusDot 
@@ -164,16 +70,23 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: Equipm
                     />
                 )}
             </NameContainer>
-            <Text>{equipment.releaseDate ? equipment.releaseDate : 'Нет данных'}</Text>
-            <Text>{equipment.softwareStartDate || 'Нет данных'}</Text>
-            <Text>{equipment.softwareEndDate || 'Нет данных'}</Text>
-            <Text>{equipment.manufacturer}</Text>
-            <Text>{equipment.place_id}</Text>
+        ),
+        category: () => <Text key="category">{equipment.category || 'Нет данных'}</Text>,
+        releaseDate: () => <Text key="releaseDate">{equipment.releaseDate ? equipment.releaseDate : 'Нет данных'}</Text>,
+        softwareStartDate: () => <Text key="softwareStartDate">{equipment.softwareStartDate || 'Нет данных'}</Text>,
+        softwareEndDate: () => <Text key="softwareEndDate">{equipment.softwareEndDate || 'Нет данных'}</Text>,
+        updateDate: () => <Text key="updateDate">{equipment.updateDate || 'Нет данных'}</Text>,
+        manufacturer: () => <Text key="manufacturer">{equipment.manufacturer}</Text>,
+        place_id: () => <Text key="place_id">{equipment.place_id}</Text>,
+        version: () => <Text key="version">{equipment.version || 'Нет данных'}</Text>,
+    };
+
+    return (
+        <EquipmentContainer type={type} style={{ gridTemplateColumns: gridTemplate }}>
+            {visibleColumns.map((key) => columnRenderers[key]())}
         </EquipmentContainer>
     );
 };
-
-// SVG иконки
 
 const EditIcon = () => (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -191,28 +104,15 @@ const DeleteIcon = () => (
     </svg>
 );
 
-const QRIcon = () => (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="5" height="5"/>
-        <rect x="16" y="3" width="5" height="5"/>
-        <rect x="3" y="16" width="5" height="5"/>
-        <line x1="5.5" y1="8.5" x2="5.5" y2="15.5"/>
-        <line x1="18.5" y1="8.5" x2="18.5" y2="15.5"/>
-        <line x1="8.5" y1="5.5" x2="15.5" y2="5.5"/>
-        <line x1="8.5" y1="18.5" x2="15.5" y2="18.5"/>
-        <rect x="16" y="16" width="3" height="3"/>
-        <line x1="12" y1="12" x2="12" y2="12.01"/>
-    </svg>
-);
-
 const EquipmentContainer = styled('div', {
     display: 'grid',
-    gridTemplateColumns: '80px 60px 200px 120px 120px 120px 150px 100px',
-    padding: '20px 16px',
+    padding: '12px 12px',
     borderBottom: '1px solid rgba(107, 114, 128, 0.19)',
     alignItems: 'center',
-    minHeight: '60px',
-    gap: '16px',
+    minHeight: '48px',
+    gap: '14px',
+    fontSize: '14px',
+    minWidth: 'fit-content',
     variants: {
         type: {
             warning: {
@@ -284,11 +184,11 @@ const IconButton = styled('button', {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: '#6b7280', // серый цвет
+    color: '#6b7280',
     transition: 'all 0.2s ease',
     '&:hover': {
         backgroundColor: 'rgba(0, 0, 0, 0.1)',
-        color: '#374151', // темнее при наведении
+        color: '#374151',
         transform: 'scale(1.1)',
     },
     '&:active': {

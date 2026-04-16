@@ -10,7 +10,10 @@ import axios from 'axios';
 import { Equipment as EquipmentType, EquipmentFormData } from '@/shared/types';
 import { AddEquipmentPopup } from './euipment-popup';
 import { EditEquipmentPopup } from './edit-equipment-popup';
-import { checkAllSNMPDevices, checkSNMPStatus } from '@/app/api';
+import { QRPrintPopup } from './qr-print-popup';
+import { checkAllSNMPDevices } from '@/app/api';
+import { ColumnKey, loadVisibleColumns, saveVisibleColumns } from '@/shared/config';
+import { NetworkDiscoveryPopup } from './network-discovery-popup';
 
 export const EquipmentList: React.FC = () => {
     const equipmentList = useUnit($items);
@@ -24,8 +27,15 @@ export const EquipmentList: React.FC = () => {
     const [editingEquipment, setEditingEquipment] = useState<EquipmentType | null>(null);
     const [snmpStatuses, setSnmpStatuses] = useState<Record<number, EquipmentType['snmp_status']>>({});
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(loadVisibleColumns);
+    const [isQRPrintOpen, setIsQRPrintOpen] = useState(false);
+    const [isDiscoveryOpen, setIsDiscoveryOpen] = useState(false);
 
-    // Добавляем логирование для отладки
+    const handleColumnsChange = useCallback((cols: ColumnKey[]) => {
+        setVisibleColumns(cols);
+        saveVisibleColumns(cols);
+    }, []);
+
     useEffect(() => {
         console.log('EquipmentList: equipmentList updated:', equipmentList);
     }, [equipmentList]);
@@ -34,18 +44,14 @@ export const EquipmentList: React.FC = () => {
         fetchEquipmentFx();
     }, []);
 
-    // Функция для проверки SNMP статусов всех устройств
     const checkSNMPStatuses = useCallback(async () => {
         try {
-            // Получаем все устройства с включенным SNMP
             const devicesWithSNMP = equipmentList.filter(
                 (eq) => eq.snmp_config?.enabled
             );
 
-            // Очищаем статусы для всех устройств, у которых SNMP отключен
             setSnmpStatuses((prev) => {
                 const updated: Record<number, EquipmentType['snmp_status']> = {};
-                // Оставляем только статусы для устройств с включенным SNMP
                 Object.entries(prev).forEach(([deviceId, status]) => {
                     const device = equipmentList.find(eq => eq.id === Number(deviceId));
                     if (device?.snmp_config?.enabled) {
@@ -59,15 +65,12 @@ export const EquipmentList: React.FC = () => {
                 return;
             }
 
-            // Проверяем все устройства через API
             const results = await checkAllSNMPDevices();
             
-            // Обновляем статусы только для устройств с включенным SNMP
             const newStatuses: Record<number, EquipmentType['snmp_status']> = {};
             Object.entries(results.results).forEach(([deviceId, status]) => {
                 const deviceIdNum = Number(deviceId);
                 const device = equipmentList.find(eq => eq.id === deviceIdNum);
-                // Добавляем статус только если устройство существует и SNMP включен
                 if (device?.snmp_config?.enabled) {
                     newStatuses[deviceIdNum] = status;
                 }
@@ -79,17 +82,13 @@ export const EquipmentList: React.FC = () => {
         }
     }, [equipmentList]);
 
-    // Автоматическая проверка SNMP каждые 30 секунд
     useEffect(() => {
-        // Первая проверка сразу
         checkSNMPStatuses();
 
-        // Устанавливаем интервал на 30 секунд
         intervalRef.current = setInterval(() => {
             checkSNMPStatuses();
-        }, 30000); // 30 секунд
+        }, 30000);
 
-        // Очистка при размонтировании
         return () => {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current);
@@ -130,7 +129,6 @@ export const EquipmentList: React.FC = () => {
         try {
             await axios.delete(`http://localhost:8000/delete_device/${id}`);
             deleteEquipment(id);
-            // Убираем fetchEquipmentFx() - состояние уже обновляется через deleteEquipment
             alert('Оборудование удалено');
         } catch (error) {
             console.error('Ошибка при удалении оборудования:', error);
@@ -139,7 +137,6 @@ export const EquipmentList: React.FC = () => {
     };
 
     const handleAddEquipment = useCallback(async (data: any) => {
-        // Проверяем и преобразуем числовые поля
         const parseNumber = (value: any) => {
             if (value === null || value === undefined || value === '') {
                 return null;
@@ -158,13 +155,12 @@ export const EquipmentList: React.FC = () => {
             manufacturer: data.manufacturer,
             xCord: parseNumber(data.xCord),
             yCord: parseNumber(data.yCord),
-            place_id: data.place_id, // Оставляем как строку
+            place_id: data.place_id,
             version: data.version || "1.0",
             mapId: data.mapId ? parseNumber(data.mapId) : undefined
         };
 
 
-        // Проверяем обязательные поля
         if (!numericData.place_id || numericData.place_id.trim() === '') {
             alert(`Поле "Место" обязательно для заполнения. Получено: "${data.place_id}"`);
             return false;
@@ -183,7 +179,6 @@ export const EquipmentList: React.FC = () => {
             const response = await axios.post<{ id: number, device: any }>('http://localhost:8000/add_device', numericData);
             console.log("EquipmentList: handleAddEquipment - POST request successful.");
             
-            // Добавляем новое оборудование в состояние напрямую
             const newEquipment = response.data.device;
             addEquipment(newEquipment);
             
@@ -218,7 +213,6 @@ export const EquipmentList: React.FC = () => {
     const handleUpdateEquipment = useCallback(async (data: EquipmentFormData) => {
         if (!editingEquipment) return false;
 
-        // Проверяем и преобразуем числовые поля
         const parseNumber = (value: any) => {
             if (value === null || value === undefined || value === '') {
                 return null;
@@ -242,7 +236,6 @@ export const EquipmentList: React.FC = () => {
             mapId: data.mapId ? parseNumber(data.mapId) : undefined
         };
 
-        // Проверяем обязательные поля
         if (!numericData.place_id || numericData.place_id.trim() === '') {
             alert(`Поле "Место" обязательно для заполнения. Получено: "${data.place_id}"`);
             return false;
@@ -259,7 +252,6 @@ export const EquipmentList: React.FC = () => {
         try {
             console.log("EquipmentList: handleUpdateEquipment - Editing equipment ID:", editingEquipment.id);
             console.log("EquipmentList: handleUpdateEquipment - Sending PUT request with data:", numericData);
-            // Создаем объект с правильным ID
             const equipmentWithId = {
                 ...numericData,
                 id: editingEquipment.id
@@ -268,7 +260,6 @@ export const EquipmentList: React.FC = () => {
             console.log("EquipmentList: handleUpdateEquipment - Final equipment data with ID:", equipmentWithId);
             await updateEquipmentFx(equipmentWithId);
             console.log("EquipmentList: handleUpdateEquipment - PUT request successful.");
-            // Убираем fetchEquipmentFx() - состояние уже обновляется через updateEquipmentFx.doneData
             alert('Оборудование обновлено успешно!');
             return true;
         } catch (error) {
@@ -303,19 +294,19 @@ export const EquipmentList: React.FC = () => {
                 onFloorChange={setSelectedFloor}
                 onClassroomChange={setSelectedClassroom}
                 onAddEquipment={() => setIsPopupOpen(true)}
+                onQRPrint={() => setIsQRPrintOpen(true)}
+                onDiscoverDevices={() => setIsDiscoveryOpen(true)}
+                visibleColumns={visibleColumns}
+                onColumnsChange={handleColumnsChange}
             />
-            <Header />
+            <TableScroll>
+            <Header visibleColumns={visibleColumns} />
             {filteredEquipment.map((equipment, index) => {
-                // Объединяем данные устройства с актуальным SNMP статусом
-                // Приоритет: актуальный статус из проверки > статус из базы (snmp_config.status)
-                // ВАЖНО: статус устанавливаем только если SNMP включен
                 let finalSnmpStatus = null;
                 
                 if (equipment.snmp_config?.enabled === true) {
                     const currentSnmpStatus = snmpStatuses[equipment.id];
                     
-                    // Создаем snmp_status из базы данных если нет актуального и SNMP включен
-                    // НЕ используем статус 'disabled' из базы - он означает, что SNMP был отключен
                     if (currentSnmpStatus) {
                         finalSnmpStatus = currentSnmpStatus;
                     } else if (equipment.snmp_config?.status && equipment.snmp_config.status !== 'disabled') {
@@ -326,10 +317,9 @@ export const EquipmentList: React.FC = () => {
                             timestamp: equipment.snmp_config.last_check || undefined
                         };
                     } else {
-                        finalSnmpStatus = null; // Нет статуса или статус 'disabled'
+                        finalSnmpStatus = null;
                     }
                 } else {
-                    // Если SNMP отключен, явно очищаем статус
                     finalSnmpStatus = null;
                 }
                 
@@ -338,16 +328,6 @@ export const EquipmentList: React.FC = () => {
                     snmp_status: finalSnmpStatus,
                 };
                 
-                // Отладка для устройства 14
-                if (equipment.id === 14) {
-                    console.log('Equipment 14 SNMP:', {
-                        snmp_config: equipment.snmp_config,
-                        snmpStatusFromState: equipment.snmp_config?.enabled ? snmpStatuses[equipment.id] : undefined,
-                        finalSnmpStatus: finalSnmpStatus,
-                        final: equipmentWithSNMP.snmp_status
-                    });
-                }
-                
                 return (
                     <Equipment
                         key={`eq-${equipment.id}`}
@@ -355,9 +335,12 @@ export const EquipmentList: React.FC = () => {
                         displayNumber={index + 1}
                         onDelete={() => handleDeleteEquipment(equipment.id)}
                         onEdit={() => handleEditEquipment(equipment)}
+                        visibleColumns={visibleColumns}
                     />
                 );
             })}
+
+            </TableScroll>
 
             {isPopupOpen && (
                 <AddEquipmentPopup
@@ -378,6 +361,24 @@ export const EquipmentList: React.FC = () => {
                     }}
                 />
             )}
+
+            {isQRPrintOpen && (
+                <QRPrintPopup
+                    equipmentList={equipmentList}
+                    onClose={() => setIsQRPrintOpen(false)}
+                />
+            )}
+
+            {isDiscoveryOpen && (
+                <NetworkDiscoveryPopup
+                    onClose={() => setIsDiscoveryOpen(false)}
+                    onImported={() => {
+                        setIsDiscoveryOpen(false);
+                        fetchEquipmentFx();
+                        checkSNMPStatuses();
+                    }}
+                />
+            )}
         </StyledContainer>
     );
 };
@@ -385,4 +386,9 @@ export const EquipmentList: React.FC = () => {
 const StyledContainer = styled('div', {
     display: 'flex',
     flexDirection: 'column',
+});
+
+const TableScroll = styled('div', {
+    overflowX: 'auto',
+    minWidth: 0,
 });

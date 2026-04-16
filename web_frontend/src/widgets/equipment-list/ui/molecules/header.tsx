@@ -1,28 +1,32 @@
 import { Text } from '@consta/uikit/Text';
 import { styled } from '@stitches/react';
+import { ColumnKey, ALL_COLUMNS, getGridTemplate } from '@/shared/config';
 
-export const Header = () => {
+interface HeaderProps {
+    visibleColumns: ColumnKey[];
+}
+
+export const Header: React.FC<HeaderProps> = ({ visibleColumns }) => {
+    const columns = ALL_COLUMNS.filter((c) => visibleColumns.includes(c.key));
+    const gridTemplate = getGridTemplate(visibleColumns);
+
     return (
-        <HeaderContainer>
-            <Text>Действия</Text>
-            <Text>№</Text>
-            <Text>Название</Text>
-            <Text>Дата закупки</Text>
-            <Text>Дата устаревания</Text>
-            <Text>Дата снятия</Text>
-            <Text>Производитель</Text>
-            <Text>Место</Text>
+        <HeaderContainer style={{ gridTemplateColumns: gridTemplate }}>
+            {columns.map((col) => (
+                <Text key={col.key}>{col.label}</Text>
+            ))}
         </HeaderContainer>
     );
 };
 
 const HeaderContainer = styled('div', {
     display: 'grid',
-    gridTemplateColumns: '80px 60px 200px 120px 120px 120px 150px 100px',
-    padding: '20px 16px',
+    padding: '14px 12px',
     borderBottom: '1px solid rgba(107, 114, 128, 0.19)',
     color: '#6b7280',
-    minHeight: '60px',
+    minHeight: '48px',
     alignItems: 'center',
-    gap: '16px',
+    gap: '14px',
+    fontSize: '14px',
+    minWidth: 'fit-content',
 });

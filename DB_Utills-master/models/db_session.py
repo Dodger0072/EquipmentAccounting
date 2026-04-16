@@ -21,7 +21,8 @@ __factory = None
 
 
 def get_database_url(alembic: bool = False) -> str:
-    schema = "postgresql+asyncpg"
+    # psycopg_async стабильнее asyncpg на Windows (обрывы соединения / WinError 64)
+    schema = "postgresql+psycopg_async"
     
     # Попробуем получить настройки из переменных окружения
     db_user = env('DB_USER')

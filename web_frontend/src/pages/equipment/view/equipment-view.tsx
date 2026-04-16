@@ -191,18 +191,25 @@ const Container = styled('div', {
   minHeight: '100vh',
   padding: '24px',
   backgroundColor: '#f9fafb',
+  '@media (max-width: 768px)': {
+    padding: '12px',
+  },
 });
 
 const Header = styled('div', {
   display: 'flex',
   alignItems: 'center',
-  gap: '16px',
-  marginBottom: '24px',
+  gap: '12px',
+  marginBottom: '20px',
+  flexWrap: 'wrap',
 });
 
 const Title = styled(Text, {
-  fontSize: '24px',
+  fontSize: '22px',
   fontWeight: '600',
+  '@media (max-width: 768px)': {
+    fontSize: '18px',
+  },
 });
 
 const Content = styled('div', {
@@ -213,23 +220,31 @@ const Content = styled('div', {
 const Card = styled('div', {
   backgroundColor: 'white',
   borderRadius: '12px',
-  padding: '32px',
+  padding: '24px',
   boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+  '@media (max-width: 768px)': {
+    padding: '16px',
+  },
 });
 
 const CardHeader = styled('div', {
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  marginBottom: '32px',
-  paddingBottom: '24px',
+  marginBottom: '24px',
+  paddingBottom: '16px',
   borderBottom: '1px solid #e5e7eb',
+  flexWrap: 'wrap',
+  gap: '12px',
 });
 
 const EquipmentName = styled(Text, {
-  fontSize: '28px',
+  fontSize: '24px',
   fontWeight: '700',
   color: '#111827',
+  '@media (max-width: 768px)': {
+    fontSize: '20px',
+  },
 });
 
 const SNMPBadge = styled('div', {
@@ -268,12 +283,16 @@ const InfoGrid = styled('div', {
 
 const InfoRow = styled('div', {
   display: 'grid',
-  gridTemplateColumns: '200px 1fr',
-  gap: '16px',
-  padding: '12px 0',
+  gridTemplateColumns: '160px 1fr',
+  gap: '12px',
+  padding: '10px 0',
   borderBottom: '1px solid #f3f4f6',
   '&:last-child': {
     borderBottom: 'none',
+  },
+  '@media (max-width: 600px)': {
+    gridTemplateColumns: '1fr',
+    gap: '4px',
   },
 });
 

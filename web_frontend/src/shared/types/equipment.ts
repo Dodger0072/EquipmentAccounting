@@ -41,3 +41,26 @@ export type Equipment = {
 export type EquipmentFormData = Omit<Equipment, 'id'> & {
   id?: number;
 };
+
+export type DiscoveredDevice = {
+  ip: string;
+  mac: string;
+  name: string;
+  description: string;
+  manufacturer_guess: string;
+  device_type_guess: string;
+  uptime: string;
+  location: string;
+  contact: string;
+  community: string;
+  snmp_version: string;
+  response_time_ms: number;
+  has_snmp: boolean;
+};
+
+export type DiscoveryResult = {
+  discovered: DiscoveredDevice[];
+  total_scanned: number;
+  total_found: number;
+  scan_time: number;
+};

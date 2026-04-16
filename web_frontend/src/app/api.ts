@@ -194,7 +194,7 @@ export async function deleteDevicesByCategory(categoryId: number): Promise<{mess
 }
 
 // API для работы с SNMP
-import { SNMPConfig, SNMPStatus } from '@/shared/types/equipment';
+import { SNMPConfig, SNMPStatus, DiscoveryResult } from '@/shared/types/equipment';
 
 export async function checkSNMPStatus(deviceId: number): Promise<SNMPStatus> {
   const response = await fetch(`${backendUrl}/snmp/check/${deviceId}`);
@@ -241,6 +241,55 @@ export async function getSNMPStatusSummary(): Promise<{
     throw new Error(`Ошибка получения статистики SNMP: ${errorText}`);
   }
   return (await response.json());
+}
+
+export async function getLocalSubnet(): Promise<{ subnet: string; local_ip: string }> {
+  const response = await fetch(`${backendUrl}/snmp/discover/subnet`);
+  if (!response.ok) return { subnet: '192.168.0.0/24', local_ip: '' };
+  return await response.json();
+}
+
+// API для SNMP Discovery
+export async function discoverDevices(
+  subnet: string,
+  communities: string[] = ['public'],
+  timeout: number = 1.0,
+): Promise<DiscoveryResult> {
+  const response = await fetch(`${backendUrl}/snmp/discover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subnet, communities, timeout }),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка сканирования сети: ${errorText}`);
+  }
+  return (await response.json()) as DiscoveryResult;
+}
+
+export async function importDiscoveredDevices(
+  devices: Array<Record<string, any>>,
+  category: string,
+  place_id: string,
+  location?: { x: number; y: number; mapId: number },
+): Promise<{ imported: Array<{ id: number; name: string; ip: string }>; count: number }> {
+  const response = await fetch(`${backendUrl}/snmp/discover/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      devices,
+      category,
+      place_id,
+      xCord: location?.x ?? 0,
+      yCord: location?.y ?? 0,
+      mapId: location?.mapId ?? null,
+    }),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка импорта устройств: ${errorText}`);
+  }
+  return await response.json();
 }
 
 // API для получения оборудования по ID

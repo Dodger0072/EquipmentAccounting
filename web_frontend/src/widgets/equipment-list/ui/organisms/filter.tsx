@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { styled } from '@stitches/react';
 import { useUnit } from 'effector-react';
 import { Search } from '../atoms';
-import { FileInteraction } from '../molecules';
+import { FileInteraction, ColumnSettings } from '../molecules';
 import { fetchCategoriesFx, $equipmentCategories } from '../../model';
 import { getClassrooms, Classroom, getPlaces, Place } from '@/app/api';
+import { ColumnKey } from '@/shared/config';
 
 interface FilterProps {
   onSearch: (searchTerm: string) => void;
@@ -13,6 +14,10 @@ interface FilterProps {
   onFloorChange: (floor: string | null) => void;
   onClassroomChange: (classroomName: string | null) => void;
   onAddEquipment: () => void;
+  onQRPrint: () => void;
+  onDiscoverDevices: () => void;
+  visibleColumns: ColumnKey[];
+  onColumnsChange: (columns: ColumnKey[]) => void;
 }
 
 export const Filter: React.FC<FilterProps> = ({ 
@@ -21,7 +26,11 @@ export const Filter: React.FC<FilterProps> = ({
   onEquipmentCategoryChange,
   onFloorChange,
   onClassroomChange,
-  onAddEquipment
+  onAddEquipment,
+  onQRPrint,
+  onDiscoverDevices,
+  visibleColumns,
+  onColumnsChange,
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -52,8 +61,6 @@ export const Filter: React.FC<FilterProps> = ({
     loadData();
   }, []);
 
-  // Фильтруем аудитории по выбранному этажу
-  // selectedFloor это строка с ID места (map_id)
   const filteredClassrooms = selectedFloor 
     ? allClassrooms.filter(classroom => {
         const floorMapId = parseInt(selectedFloor);
@@ -67,7 +74,6 @@ export const Filter: React.FC<FilterProps> = ({
   };
 
   const handleEquipmentCategoryChange = (categoryName: string | null) => {
-    // Явно преобразуем пустую строку в null для "Все категории"
     const normalizedCategory = categoryName === '' ? null : categoryName;
     setSelectedEquipmentCategory(normalizedCategory);
     onEquipmentCategoryChange(normalizedCategory);
@@ -81,7 +87,6 @@ export const Filter: React.FC<FilterProps> = ({
   const handleFloorChange = (floor: string | null) => {
     setSelectedFloor(floor);
     onFloorChange(floor);
-    // Сбрасываем выбранную аудиторию при смене этажа
     if (floor !== selectedFloor) {
       setSelectedClassroom(null);
       onClassroomChange(null);
@@ -190,28 +195,35 @@ export const Filter: React.FC<FilterProps> = ({
         )}
       </FilterSection>
 
-      <FileInteraction />
+      <ColumnSettings visibleColumns={visibleColumns} onChange={onColumnsChange} />
+
+      <FileInteraction onQRPrint={onQRPrint} />
 
       <AddEquipmentButton onClick={onAddEquipment}>
         <AddIcon />
         Добавить оборудование
       </AddEquipmentButton>
+
+      <DiscoverButton onClick={onDiscoverDevices}>
+        <DiscoverIcon />
+        Поиск устройств
+      </DiscoverButton>
     </Container>
   );
 };
 
 const Container = styled('div', {
-  marginBottom: '32px',
+  marginBottom: '16px',
   display: 'flex',
   alignItems: 'center',
-  gap: '16px',
+  gap: '10px',
   flexWrap: 'wrap',
 });
 
 const SearchContainer = styled('div', {
-  flex: '1',
-  minWidth: '300px',
-  maxWidth: '400px',
+  flex: '0 1 auto',
+  width: '220px',
+  minWidth: '160px',
 });
 
 const FilterSection = styled('div', {
@@ -221,16 +233,17 @@ const FilterSection = styled('div', {
 const FilterButton = styled('button', {
   display: 'flex',
   alignItems: 'center',
-  gap: '8px',
-  padding: '10px 16px',
+  gap: '6px',
+  padding: '8px 12px',
   backgroundColor: '#f8fafc',
   border: '1px solid #e2e8f0',
   borderRadius: '8px',
-  fontSize: '14px',
+  fontSize: '13px',
   fontWeight: '500',
   color: '#475569',
   cursor: 'pointer',
   transition: 'all 0.2s ease',
+  whiteSpace: 'nowrap',
   
   '&:hover': {
     backgroundColor: '#f1f5f9',
@@ -328,16 +341,17 @@ const ClearButton = styled('button', {
 const AddEquipmentButton = styled('button', {
   display: 'flex',
   alignItems: 'center',
-  gap: '8px',
-  padding: '12px 24px',
+  gap: '6px',
+  padding: '8px 16px',
   backgroundColor: '#3b82f6',
   border: 'none',
   borderRadius: '6px',
-  fontSize: '14px',
+  fontSize: '13px',
   fontWeight: '500',
   color: 'white',
   cursor: 'pointer',
   transition: 'all 0.2s ease',
+  whiteSpace: 'nowrap',
   
   '&:hover': {
     backgroundColor: '#2563eb',
@@ -357,6 +371,43 @@ const AddIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="5" x2="12" y2="19"/>
     <line x1="5" y1="12" x2="19" y2="12"/>
+  </svg>
+);
+
+const DiscoverButton = styled('button', {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '8px 16px',
+  backgroundColor: '#8b5cf6',
+  border: 'none',
+  borderRadius: '6px',
+  fontSize: '13px',
+  fontWeight: '500',
+  color: 'white',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  whiteSpace: 'nowrap',
+
+  '&:hover': {
+    backgroundColor: '#7c3aed',
+  },
+
+  '&:active': {
+    transform: 'translateY(1px)',
+  },
+
+  '& svg': {
+    width: '16px',
+    height: '16px',
+  },
+});
+
+const DiscoverIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="2" y1="12" x2="22" y2="12"/>
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
   </svg>
 );
 

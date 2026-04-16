@@ -1,3 +1,17 @@
+import sys
+import asyncio
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    # Uvicorn на Windows по умолчанию берёт ProactorEventLoop (см. uvicorn.loops.asyncio);
+    # psycopg_async с ним не работает, asyncpg часто даёт обрыв соединения.
+    import uvicorn.loops.asyncio as _uvicorn_asyncio_loop
+
+    def _selector_loop_factory(use_subprocess: bool = False):
+        return asyncio.SelectorEventLoop
+
+    _uvicorn_asyncio_loop.asyncio_loop_factory = _selector_loop_factory
+
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +27,6 @@ from datetime import datetime
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
-import asyncio
 import qrcode
 import io
 try:
@@ -24,9 +37,20 @@ except ImportError as e:
     print(f"WARNING: SNMP service not available: {e}")
     SNMPService = None
 
+try:
+    from services.network_discovery_service import NetworkDiscoveryService
+    DISCOVERY_AVAILABLE = True
+except ImportError as e:
+    DISCOVERY_AVAILABLE = False
+    print(f"WARNING: Network discovery service not available: {e}")
+    NetworkDiscoveryService = None
+
 from models.device_snmp_config import DeviceSNMPConfig
 from models.config import Settings
 from sqlalchemy import select
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Инициализация настроек
 settings = Settings()
@@ -268,7 +292,7 @@ async def search_devices():
         # Делаем JOIN с таблицей категорий, чтобы получить иконку
         result = await db.execute(
             select(device, category)
-            .join(category, device.category == category.name)
+            .outerjoin(category, device.category == category.name)
         )
         devices_with_categories = result.all()
         
@@ -319,6 +343,12 @@ async def search_devices():
             "devices": devices_list
         }
 
+
+async def _delete_device_dependents(db: AsyncSession, device_id: int) -> None:
+    """Удаляет строки, ссылающиеся на device.id (иначе FK блокирует удаление)."""
+    await db.execute(delete(DeviceSNMPConfig).where(DeviceSNMPConfig.device_id == device_id))
+
+
 @app.delete("/delete_device/{device_id}", tags=["оборудование"])
 async def delete_device(device_id: int):
     async with create_session() as db:
@@ -328,6 +358,7 @@ async def delete_device(device_id: int):
         if not db_device:
             raise HTTPException(status_code=404, detail="Device not found")
         
+        await _delete_device_dependents(db, device_id)
         await db.execute(delete(device).where(device.id == device_id))
         await db.commit()
         
@@ -351,7 +382,8 @@ async def delete_devices_by_category(category_id: int):
         if not devices:
             raise HTTPException(status_code=404, detail="No devices found for this category")
         
-        # Удаляем все устройства
+        for d in devices:
+            await _delete_device_dependents(db, d.id)
         await db.execute(delete(device).where(device.category == category_obj.name))
         await db.commit()
         
@@ -980,6 +1012,110 @@ async def get_snmp_status_summary(db: AsyncSession = Depends(create_session)):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get SNMP status: {str(e)}")
+
+# Network Discovery Endpoints
+discovery_service = NetworkDiscoveryService() if DISCOVERY_AVAILABLE else None
+
+@app.get("/snmp/discover/subnet", tags=["SNMP Discovery"])
+async def get_local_subnet():
+    """Определяет локальную подсеть сервера для подстановки по умолчанию"""
+    import socket
+    import ipaddress as _ip
+    try:
+        # Открываем UDP-сокет, чтобы узнать IP, через который идёт маршрут наружу
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        # Считаем подсеть /24
+        net = _ip.IPv4Network(f"{local_ip}/24", strict=False)
+        return {"subnet": str(net), "local_ip": local_ip}
+    except Exception:
+        return {"subnet": "192.168.0.0/24", "local_ip": ""}
+
+@app.post("/snmp/discover", tags=["SNMP Discovery"])
+async def discover_network_devices(body: dict):
+    """Сканирует подсеть и возвращает найденные SNMP-устройства"""
+    if not DISCOVERY_AVAILABLE or not discovery_service:
+        raise HTTPException(
+            status_code=503,
+            detail="Network discovery service is not available. Install pysnmp: pip install pysnmp",
+        )
+
+    subnet = body.get("subnet")
+    if not subnet:
+        raise HTTPException(status_code=400, detail="Missing required field: subnet")
+
+    communities = body.get("communities", ["public"])
+    timeout = body.get("timeout", 1.0)
+    port = body.get("port", 161)
+
+    svc = NetworkDiscoveryService(timeout=float(timeout), retries=0, concurrency=50)
+    try:
+        result = await svc.discover(subnet, communities=communities, port=int(port))
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        import traceback
+        logger.error(f"Discovery failed:\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Discovery failed: {exc}")
+
+
+@app.post("/snmp/discover/import", tags=["SNMP Discovery"])
+async def import_discovered_devices(body: dict, db: AsyncSession = Depends(create_session)):
+    """Импортирует выбранные устройства из результатов сканирования в БД"""
+    devices_data = body.get("devices", [])
+    if not devices_data:
+        raise HTTPException(status_code=400, detail="No devices provided for import")
+
+    category_name = body.get("category", "")
+    place_name = body.get("place_id", "")
+    x_cord = body.get("xCord", 0.0)
+    y_cord = body.get("yCord", 0.0)
+    map_id = body.get("mapId", None)
+
+    imported = []
+
+    for dev in devices_data:
+        ip = dev.get("ip", "")
+        name = dev.get("name") or ip
+        manufacturer_name = dev.get("manufacturer_guess", "")
+
+        device_data = {
+            "name": name,
+            "category": category_name,
+            "place_id": place_name,
+            "version": "",
+            "manufacturer": manufacturer_name,
+            "xCord": x_cord,
+            "yCord": y_cord,
+            "mapId": map_id,
+        }
+        try:
+            new_device = await device.insert_device(db, device_data)
+
+            snmp_config_data = {
+                "enabled": True,
+                "ip_address": ip,
+                "port": dev.get("port", 161),
+                "community": dev.get("community", "public"),
+                "version": dev.get("snmp_version", "2c"),
+                "status": "unknown",
+            }
+            await DeviceSNMPConfig.create_or_update(db, new_device.id, snmp_config_data)
+
+            imported.append({
+                "id": new_device.id,
+                "name": name,
+                "ip": ip,
+            })
+        except Exception as exc:
+            logger.error(f"Failed to import device {ip}: {exc}")
+            continue
+
+    return {"imported": imported, "count": len(imported)}
+
 
 if __name__ == "__main__":
     import uvicorn
