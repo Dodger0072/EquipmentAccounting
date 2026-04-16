@@ -257,3 +257,138 @@ export async function getEquipmentById(id: number): Promise<Equipment> {
 export function getEquipmentQRCodeUrl(id: number): string {
   return `${backendUrl}/equipment/${id}/qr`;
 }
+
+// API для работы с картами (places)
+export interface Place {
+  id: number;
+  name: string;
+}
+
+export async function getPlaces(): Promise<Place[]> {
+  const response = await fetch(`${backendUrl}/places`);
+  if (!response.ok) throw new Error('Ошибка загрузки карт');
+  return (await response.json()) as Place[];
+}
+
+// API для работы с аудиториями
+export interface Classroom {
+  id: number;
+  name: string;
+  map_id: number;
+  polygon_coordinates: Array<{ x: number; y: number }>;
+  description?: string;
+}
+
+export async function getClassrooms(): Promise<Classroom[]> {
+  const response = await fetch(`${backendUrl}/classrooms`);
+  if (!response.ok) throw new Error('Ошибка загрузки аудиторий');
+  return (await response.json()) as Classroom[];
+}
+
+export async function getClassroomsByMap(mapId: number): Promise<Classroom[]> {
+  const response = await fetch(`${backendUrl}/classrooms/map/${mapId}`);
+  if (!response.ok) throw new Error('Ошибка загрузки аудиторий для карты');
+  return (await response.json()) as Classroom[];
+}
+
+export async function findClassroomByPoint(mapId: number, x: number, y: number): Promise<{ classroom: Classroom | null }> {
+  const response = await fetch(`${backendUrl}/classrooms/find-by-point?map_id=${mapId}&x=${x}&y=${y}`);
+  if (!response.ok) throw new Error('Ошибка поиска аудитории');
+  return (await response.json()) as { classroom: Classroom | null };
+}
+
+export async function addClassroom(data: Omit<Classroom, 'id'>): Promise<Classroom> {
+  const response = await fetch(`${backendUrl}/classrooms`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка добавления аудитории: ${errorText}`);
+  }
+  return (await response.json()) as Classroom;
+}
+
+export async function updateClassroom(id: number, data: Partial<Classroom>): Promise<Classroom> {
+  const response = await fetch(`${backendUrl}/classrooms/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Ошибка обновления аудитории: ${errorText}`);
+  }
+  return (await response.json()) as Classroom;
+}
+
+export async function deleteClassroom(id: number): Promise<void> {
+  console.log('Attempting to delete classroom with id:', id);
+  console.log('URL:', `${backendUrl}/classrooms/${id}`);
+  
+  try {
+    const response = await fetch(`${backendUrl}/classrooms/${id}`, {
+      method: 'DELETE',
+    });
+    
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    // Проверяем успешный ответ
+    if (response.ok) {
+      // Для DELETE запросов может не быть тела ответа, это нормально
+      try {
+        const data = await response.json();
+        console.log('Response data:', data);
+      } catch (e) {
+        // Если нет JSON, это нормально для DELETE
+        console.log('No response body (normal for DELETE)');
+      }
+      return; // Успешное удаление
+    }
+    
+    if (!response.ok) {
+      let errorData;
+      try {
+        const text = await response.text();
+        console.log('Response text:', text);
+        errorData = JSON.parse(text);
+        console.error('Error data:', errorData);
+      } catch (e) {
+        console.error('Failed to parse error response:', e);
+        throw new Error(`Ошибка удаления аудитории: HTTP ${response.status}`);
+      }
+      
+      // Если это ошибка с привязанными устройствами, бросаем специальную ошибку
+      if (response.status === 400 && errorData.detail && typeof errorData.detail === 'object' && errorData.detail.devices) {
+        console.log('Found devices in error response:', errorData.detail.devices);
+        const error = new Error(errorData.detail.message) as Error & { devices: any[] };
+        error.devices = errorData.detail.devices;
+        throw error;
+      }
+      
+      const errorMessage = typeof errorData.detail === 'string' 
+        ? errorData.detail 
+        : errorData.detail?.message || 'Неизвестная ошибка';
+      throw new Error(`Ошибка удаления аудитории: ${errorMessage}`);
+    }
+    
+    console.log('Classroom deleted successfully');
+  } catch (error) {
+    console.error('Fetch error:', error);
+    console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    
+    // Если это ошибка сети, бросаем её как есть
+    if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed') || error.message.includes('NetworkError'))) {
+      throw new Error('Failed to fetch');
+    }
+    throw error;
+  }
+}

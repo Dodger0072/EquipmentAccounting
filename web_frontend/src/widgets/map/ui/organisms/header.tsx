@@ -1,6 +1,6 @@
 import { styled } from '@stitches/react';
 
-import { Categories, Place, ShowRadius } from '../atoms';
+import { Categories, Place, ClassroomSelector } from '../atoms';
 
 export const Header = () => {
   return (
@@ -8,8 +8,8 @@ export const Header = () => {
       <LeftContainer>
         <Categories />
         <Place />
+        <ClassroomSelector />
       </LeftContainer>
-      <ShowRadius />
     </Container>
   );
 };
@@ -25,5 +25,5 @@ const LeftContainer = styled('div', {
   display: 'flex',
   alignItems: 'center',
   gap: '16px',
-  width: '30%',
+  width: '70%',
 });

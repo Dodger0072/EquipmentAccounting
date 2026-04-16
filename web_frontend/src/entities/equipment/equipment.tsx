@@ -40,11 +40,29 @@ const getSNMPStatusText = (status?: string) => {
 
 export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: EquipmentProps) => {
     const type = getType(equipment.softwareEndDate || '');
+    const hasSNMP = equipment.snmp_config?.enabled === true; // Явно проверяем на true
     // Приоритет: сначала snmp_status (актуальный), потом snmp_config.status (из базы)
-    const snmpStatus = equipment.snmp_status?.status || equipment.snmp_config?.status || 'unknown';
-    const hasSNMP = equipment.snmp_config?.enabled;
-    // Время отклика из актуального статуса или из конфигурации
-    const responseTime = equipment.snmp_status?.response_time || equipment.snmp_config?.response_time;
+    // ВАЖНО: НЕ используем статус из snmp_config, если SNMP отключен или статус 'disabled'
+    // Используем только snmp_status из состояния или статус из базы, если он не 'disabled'
+    let snmpStatus: string | undefined = undefined;
+    let responseTime: number | undefined = undefined;
+    
+    if (hasSNMP) {
+        // Используем актуальный статус из проверки
+        if (equipment.snmp_status?.status && equipment.snmp_status.status !== 'disabled') {
+            snmpStatus = equipment.snmp_status.status;
+            responseTime = equipment.snmp_status.response_time;
+        } 
+        // Или статус из базы, но только если он не 'disabled' и не null/undefined
+        else if (equipment.snmp_config?.status && 
+                 equipment.snmp_config.status !== 'disabled' && 
+                 equipment.snmp_config.status !== null && 
+                 equipment.snmp_config.status !== undefined) {
+            snmpStatus = equipment.snmp_config.status;
+            responseTime = equipment.snmp_config.response_time;
+        }
+        // Если нет статуса, не показываем индикатор (snmpStatus остается undefined)
+    }
     
     const handlePrintQR = () => {
         const qrUrl = getEquipmentQRCodeUrl(equipment.id);
@@ -139,7 +157,7 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onEdit }: Equipm
             <Text>{displayNumber}</Text>
             <NameContainer>
                 <Text>{equipment.name}</Text>
-                {hasSNMP && (
+                {hasSNMP && snmpStatus && (
                     <SNMPStatusDot 
                         status={snmpStatus}
                         title={`${getSNMPStatusText(snmpStatus)}${responseTime ? ` (${Math.round(responseTime)}ms)` : ''}`}

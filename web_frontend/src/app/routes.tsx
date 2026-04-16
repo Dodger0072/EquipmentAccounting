@@ -1,5 +1,5 @@
 
-import { EquipmentPage, EquipmentViewPage, MapPage, SiteSearch, AboutPage, AboutProjectPage, ContactsPage, FAQPage, HelpPage, SupportPage, CategoriesPage, ManufacturersPage} from '@/pages';
+import { EquipmentPage, EquipmentViewPage, MapPage, SiteSearch, AboutPage, AboutProjectPage, ContactsPage, FAQPage, HelpPage, SupportPage, CategoriesPage, ManufacturersPage, ClassroomsPage} from '@/pages';
 
 export  interface Route {
   path: string;
@@ -9,11 +9,6 @@ export  interface Route {
 }
 
 export const routes: Route[] = [
-  {
-    path: '/',
-    name: 'Оборудование',
-    element: <EquipmentPage />,
-  },
   {
     path: '/equipment',
     name: 'Оборудование',
@@ -43,6 +38,11 @@ export const routes: Route[] = [
         path: '/admin/manufacturers',
         name: 'Производители',
         element: <ManufacturersPage />,
+      },
+      {
+        path: '/admin/classrooms',
+        name: 'Аудитории',
+        element: <ClassroomsPage />,
       },
       {
         path: '/search',

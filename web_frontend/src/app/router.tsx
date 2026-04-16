@@ -1,5 +1,5 @@
 
-import { createBrowserRouter, RouterProvider, RouteObject  } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, RouteObject, Navigate  } from 'react-router-dom';
 import { routes, Route } from './routes';
 import { HomePage } from '@/pages';
 
@@ -17,7 +17,13 @@ console.log(mapRoutes(routes))
 const router = createBrowserRouter([
   {
     element: <HomePage />, 
-    children: mapRoutes(routes), 
+    children: [
+      {
+        path: '/',
+        element: <Navigate to="/equipment" replace />,
+      },
+      ...mapRoutes(routes),
+    ],
   },
 ]);
 

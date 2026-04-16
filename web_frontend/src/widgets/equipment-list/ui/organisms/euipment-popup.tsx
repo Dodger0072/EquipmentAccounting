@@ -88,13 +88,17 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({
         }));
     }, []);
 
-    const handleLocationSelect = useCallback((x: number, y: number, mapId: number) => {
+    const handleLocationSelect = useCallback((x: number, y: number, mapId: number, classroomName?: string) => {
         setFormData(prev => ({
             ...prev,
             xCord: x,
             yCord: y,
-            mapId: mapId
+            mapId: mapId,
+            place_id: classroomName || prev.place_id // Автоматически заполняем аудиторию если найдена
         }));
+        if (classroomName) {
+            alert(`Аудитория автоматически определена: ${classroomName}`);
+        }
     }, []);
 
     const toggleMapSelector = useCallback(() => {
@@ -237,17 +241,6 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({
                     </FormField>
                     
                     <FormField>
-                        <Label>Место *</Label>
-                        <InputField 
-                            name="place_id" 
-                            placeholder="Введите название места" 
-                            value={formData.place_id} 
-                            onChange={handleInputChange} 
-                            required 
-                        />
-                    </FormField>
-                    
-                    <FormField>
                         <Label>Размещение на карте *</Label>
                         <LocationContainer>
                             <LocationButton type="button" onClick={toggleMapSelector}>
@@ -270,6 +263,17 @@ export const AddEquipmentPopup: React.FC<AddEquipmentPopupProps> = ({
                                 </MapSelectorContainer>
                             )}
                         </LocationContainer>
+                    </FormField>
+                    
+                    <FormField>
+                        <Label>Место *</Label>
+                        <InputField 
+                            name="place_id" 
+                            placeholder="Введите название места" 
+                            value={formData.place_id} 
+                            onChange={handleInputChange} 
+                            required 
+                        />
                     </FormField>
                     
                     <Button type="submit" disabled={isLoading}>

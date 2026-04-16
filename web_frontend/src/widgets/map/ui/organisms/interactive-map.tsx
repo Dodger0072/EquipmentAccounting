@@ -7,7 +7,7 @@ import { $places, fetchPlacesFx } from '../../model';
 import { EnlargedMapModal } from './enlarged-map-modal';
 
 interface InteractiveMapProps {
-  onLocationSelect: (x: number, y: number, mapId: number) => void;
+  onLocationSelect: (x: number, y: number, mapId: number, classroomName?: string) => void;
   selectedLocation?: { x: number; y: number; mapId: number } | null;
   selectedMapId?: number;
 }
@@ -64,10 +64,10 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   };
 
 
-  const handleEnlargedLocationSelect = (x: number, y: number) => {
+  const handleEnlargedLocationSelect = (x: number, y: number, classroomName?: string) => {
     if (selectedPlace) {
       setClickPosition({ x, y });
-      onLocationSelect(x, y, selectedPlace.id);
+      onLocationSelect(x, y, selectedPlace.id, classroomName);
     }
   };
 

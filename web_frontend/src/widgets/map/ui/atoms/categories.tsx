@@ -1,6 +1,7 @@
 import { Select } from '@consta/uikit/Select';
 import { useUnit } from 'effector-react';
 import { useEffect } from 'react';
+import { styled } from '@stitches/react';
 
 import {
   $activeCategory,
@@ -23,7 +24,7 @@ export const Categories = () => {
   }, [fetchCategories]);
 
   return (
-    <>
+    <Container>
       <Select
         label='Категория'
         items={categories}
@@ -35,6 +36,14 @@ export const Categories = () => {
           )
         }
       />
-    </>
+    </Container>
   );
 };
+
+const Container = styled('div', {
+  minWidth: '220px',
+  width: '100%',
+  '& > *': {
+    width: '100%',
+  },
+});

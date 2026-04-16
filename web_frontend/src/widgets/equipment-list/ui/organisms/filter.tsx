@@ -4,12 +4,14 @@ import { useUnit } from 'effector-react';
 import { Search } from '../atoms';
 import { FileInteraction } from '../molecules';
 import { fetchCategoriesFx, $equipmentCategories } from '../../model';
+import { getClassrooms, Classroom, getPlaces, Place } from '@/app/api';
 
 interface FilterProps {
   onSearch: (searchTerm: string) => void;
   onCategoryChange: (categoryId: number | null) => void;
   onEquipmentCategoryChange: (categoryName: string | null) => void;
   onFloorChange: (floor: string | null) => void;
+  onClassroomChange: (classroomName: string | null) => void;
   onAddEquipment: () => void;
 }
 
@@ -18,6 +20,7 @@ export const Filter: React.FC<FilterProps> = ({
   onCategoryChange, 
   onEquipmentCategoryChange,
   onFloorChange,
+  onClassroomChange,
   onAddEquipment
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -25,11 +28,38 @@ export const Filter: React.FC<FilterProps> = ({
   const [selectedEquipmentCategory, setSelectedEquipmentCategory] = useState<string | null>(null);
   const [selectedStatusCategory, setSelectedStatusCategory] = useState<number | null>(null);
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+  const [selectedClassroom, setSelectedClassroom] = useState<string | null>(null);
+  const [allClassrooms, setAllClassrooms] = useState<Classroom[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
   const categories = useUnit($equipmentCategories);
 
   useEffect(() => {
     fetchCategoriesFx();
+    const loadData = async () => {
+      try {
+        const [cls, pls] = await Promise.all([
+          getClassrooms(),
+          getPlaces()
+        ]);
+        setAllClassrooms(cls);
+        setPlaces(pls);
+        console.log('Загружены места:', pls);
+        console.log('Загружены аудитории:', cls);
+      } catch (err) {
+        console.error('Ошибка загрузки данных:', err);
+      }
+    };
+    loadData();
   }, []);
+
+  // Фильтруем аудитории по выбранному этажу
+  // selectedFloor это строка с ID места (map_id)
+  const filteredClassrooms = selectedFloor 
+    ? allClassrooms.filter(classroom => {
+        const floorMapId = parseInt(selectedFloor);
+        return classroom.map_id === floorMapId;
+      })
+    : allClassrooms;
 
   const handleSearchChange = (newSearchTerm: string) => {
     setSearchTerm(newSearchTerm);
@@ -37,8 +67,10 @@ export const Filter: React.FC<FilterProps> = ({
   };
 
   const handleEquipmentCategoryChange = (categoryName: string | null) => {
-    setSelectedEquipmentCategory(categoryName);
-    onEquipmentCategoryChange(categoryName);
+    // Явно преобразуем пустую строку в null для "Все категории"
+    const normalizedCategory = categoryName === '' ? null : categoryName;
+    setSelectedEquipmentCategory(normalizedCategory);
+    onEquipmentCategoryChange(normalizedCategory);
   };
 
   const handleStatusCategoryChange = (categoryId: number | null) => {
@@ -49,18 +81,30 @@ export const Filter: React.FC<FilterProps> = ({
   const handleFloorChange = (floor: string | null) => {
     setSelectedFloor(floor);
     onFloorChange(floor);
+    // Сбрасываем выбранную аудиторию при смене этажа
+    if (floor !== selectedFloor) {
+      setSelectedClassroom(null);
+      onClassroomChange(null);
+    }
+  };
+
+  const handleClassroomChange = (classroomName: string | null) => {
+    setSelectedClassroom(classroomName);
+    onClassroomChange(classroomName);
   };
 
   const clearAllFilters = () => {
     setSelectedEquipmentCategory(null);
     setSelectedStatusCategory(null);
     setSelectedFloor(null);
+    setSelectedClassroom(null);
     onEquipmentCategoryChange(null);
     onCategoryChange(null);
     onFloorChange(null);
+    onClassroomChange(null);
   };
 
-  const hasActiveFilters = selectedEquipmentCategory || selectedStatusCategory || selectedFloor;
+  const hasActiveFilters = selectedEquipmentCategory || selectedStatusCategory || selectedFloor || selectedClassroom;
 
   return (
     <Container>
@@ -81,7 +125,7 @@ export const Filter: React.FC<FilterProps> = ({
               <FilterLabel>Категория оборудования:</FilterLabel>
               <FilterSelect
                 value={selectedEquipmentCategory || ''}
-                onChange={(e) => handleEquipmentCategoryChange(e.target.value || null)}
+                onChange={(e) => handleEquipmentCategoryChange(e.target.value)}
               >
                 <option value="">Все категории</option>
                 {categories.map(category => (
@@ -111,9 +155,29 @@ export const Filter: React.FC<FilterProps> = ({
                        onChange={(e) => handleFloorChange(e.target.value || null)}
                      >
                        <option value="">Все этажи</option>
-                       <option value="2">2 этаж</option>
-                       <option value="3">3 этаж</option>
-                       <option value="4">4 этаж</option>
+                       {places.map(place => (
+                         <option key={place.id} value={place.id.toString()}>
+                           {place.name}
+                         </option>
+                       ))}
+                     </FilterSelect>
+                   </FilterGroup>
+
+                   <FilterGroup>
+                     <FilterLabel>Аудитория:</FilterLabel>
+                     <FilterSelect
+                       value={selectedClassroom || ''}
+                       onChange={(e) => handleClassroomChange(e.target.value || null)}
+                       disabled={!selectedFloor}
+                     >
+                       <option value="">
+                         {selectedFloor ? 'Все аудитории' : 'Сначала выберите этаж'}
+                       </option>
+                       {filteredClassrooms.map(classroom => (
+                         <option key={classroom.id} value={classroom.name}>
+                           {classroom.name}
+                         </option>
+                       ))}
                      </FilterSelect>
                    </FilterGroup>
 

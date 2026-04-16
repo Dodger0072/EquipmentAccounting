@@ -18,6 +18,7 @@ export const EquipmentList: React.FC = () => {
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [selectedEquipmentCategory, setSelectedEquipmentCategory] = useState<string | null>(null);
     const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+    const [selectedClassroom, setSelectedClassroom] = useState<string | null>(null);
     const [isPopupOpen, setIsPopupOpen] = useState(false);
     const [isEditPopupOpen, setIsEditPopupOpen] = useState(false);
     const [editingEquipment, setEditingEquipment] = useState<EquipmentType | null>(null);
@@ -41,6 +42,19 @@ export const EquipmentList: React.FC = () => {
                 (eq) => eq.snmp_config?.enabled
             );
 
+            // Очищаем статусы для всех устройств, у которых SNMP отключен
+            setSnmpStatuses((prev) => {
+                const updated: Record<number, EquipmentType['snmp_status']> = {};
+                // Оставляем только статусы для устройств с включенным SNMP
+                Object.entries(prev).forEach(([deviceId, status]) => {
+                    const device = equipmentList.find(eq => eq.id === Number(deviceId));
+                    if (device?.snmp_config?.enabled) {
+                        updated[Number(deviceId)] = status;
+                    }
+                });
+                return updated;
+            });
+
             if (devicesWithSNMP.length === 0) {
                 return;
             }
@@ -48,10 +62,15 @@ export const EquipmentList: React.FC = () => {
             // Проверяем все устройства через API
             const results = await checkAllSNMPDevices();
             
-            // Обновляем статусы
+            // Обновляем статусы только для устройств с включенным SNMP
             const newStatuses: Record<number, EquipmentType['snmp_status']> = {};
             Object.entries(results.results).forEach(([deviceId, status]) => {
-                newStatuses[Number(deviceId)] = status;
+                const deviceIdNum = Number(deviceId);
+                const device = equipmentList.find(eq => eq.id === deviceIdNum);
+                // Добавляем статус только если устройство существует и SNMP включен
+                if (device?.snmp_config?.enabled) {
+                    newStatuses[deviceIdNum] = status;
+                }
             });
             
             setSnmpStatuses((prev) => ({ ...prev, ...newStatuses }));
@@ -90,15 +109,19 @@ export const EquipmentList: React.FC = () => {
             matchesStatusCategory = getType(equipment.softwareEndDate) === Types.alert;
         }
 
-        const matchesEquipmentCategory = selectedEquipmentCategory 
+        const matchesEquipmentCategory = selectedEquipmentCategory && selectedEquipmentCategory !== ''
             ? equipment.category === selectedEquipmentCategory
             : true;
 
             const matchesFloor = selectedFloor 
-                ? equipment.place_id === selectedFloor
+                ? equipment.mapId === parseInt(selectedFloor)
                 : true;
 
-        return matchesSearch && matchesStatusCategory && matchesEquipmentCategory && matchesFloor;
+            const matchesClassroom = selectedClassroom 
+                ? equipment.place_id === selectedClassroom
+                : true;
+
+        return matchesSearch && matchesStatusCategory && matchesEquipmentCategory && matchesFloor && matchesClassroom;
     });
 
     const handleDeleteEquipment = async (id: number) => {
@@ -278,36 +301,49 @@ export const EquipmentList: React.FC = () => {
                 onCategoryChange={setSelectedCategoryId}
                 onEquipmentCategoryChange={setSelectedEquipmentCategory}
                 onFloorChange={setSelectedFloor}
+                onClassroomChange={setSelectedClassroom}
                 onAddEquipment={() => setIsPopupOpen(true)}
             />
             <Header />
             {filteredEquipment.map((equipment, index) => {
                 // Объединяем данные устройства с актуальным SNMP статусом
                 // Приоритет: актуальный статус из проверки > статус из базы (snmp_config.status)
-                const currentSnmpStatus = snmpStatuses[equipment.id];
+                // ВАЖНО: статус устанавливаем только если SNMP включен
+                let finalSnmpStatus = null;
                 
-                // Создаем snmp_status из базы данных если нет актуального
-                let snmpStatusFromDB = null;
-                if (equipment.snmp_config?.status && !currentSnmpStatus) {
-                    snmpStatusFromDB = {
-                        status: equipment.snmp_config.status as 'up' | 'down' | 'unknown' | 'disabled' | 'error',
-                        message: `Last check: ${equipment.snmp_config.last_check || 'Never'}`,
-                        response_time: equipment.snmp_config.response_time,
-                        timestamp: equipment.snmp_config.last_check || undefined
-                    };
+                if (equipment.snmp_config?.enabled === true) {
+                    const currentSnmpStatus = snmpStatuses[equipment.id];
+                    
+                    // Создаем snmp_status из базы данных если нет актуального и SNMP включен
+                    // НЕ используем статус 'disabled' из базы - он означает, что SNMP был отключен
+                    if (currentSnmpStatus) {
+                        finalSnmpStatus = currentSnmpStatus;
+                    } else if (equipment.snmp_config?.status && equipment.snmp_config.status !== 'disabled') {
+                        finalSnmpStatus = {
+                            status: equipment.snmp_config.status as 'up' | 'down' | 'unknown' | 'error',
+                            message: `Last check: ${equipment.snmp_config.last_check || 'Never'}`,
+                            response_time: equipment.snmp_config.response_time,
+                            timestamp: equipment.snmp_config.last_check || undefined
+                        };
+                    } else {
+                        finalSnmpStatus = null; // Нет статуса или статус 'disabled'
+                    }
+                } else {
+                    // Если SNMP отключен, явно очищаем статус
+                    finalSnmpStatus = null;
                 }
                 
                 const equipmentWithSNMP: EquipmentType = {
                     ...equipment,
-                    snmp_status: currentSnmpStatus || snmpStatusFromDB,
+                    snmp_status: finalSnmpStatus,
                 };
                 
                 // Отладка для устройства 14
                 if (equipment.id === 14) {
                     console.log('Equipment 14 SNMP:', {
                         snmp_config: equipment.snmp_config,
-                        currentSnmpStatus,
-                        snmpStatusFromDB,
+                        snmpStatusFromState: equipment.snmp_config?.enabled ? snmpStatuses[equipment.id] : undefined,
+                        finalSnmpStatus: finalSnmpStatus,
                         final: equipmentWithSNMP.snmp_status
                     });
                 }

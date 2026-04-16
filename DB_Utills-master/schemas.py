@@ -62,4 +62,23 @@ class ManufacturerResponse(BaseModel):
     name: str
     description: Optional[str] = None
     category_id: int
-    category_name: Optional[str] = None 
+    category_name: Optional[str] = None
+
+class ClassroomCreate(BaseModel):
+    name: str
+    map_id: int
+    polygon_coordinates: list  # List of {x, y} points
+    description: Optional[str] = None
+
+class ClassroomUpdate(BaseModel):
+    name: Optional[str] = None
+    map_id: Optional[int] = None
+    polygon_coordinates: Optional[list] = None
+    description: Optional[str] = None
+
+class ClassroomResponse(BaseModel):
+    id: int
+    name: str
+    map_id: int
+    polygon_coordinates: list
+    description: Optional[str] = None 

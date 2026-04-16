@@ -146,26 +146,31 @@ export const EditEquipmentPopup: React.FC<EditEquipmentPopupProps> = ({
         }
 
         try {
+            const isEnabled = snmpConfig.enabled || false;
             await addSNMPConfig({
                 device_id: equipment.id!,
-                enabled: snmpConfig.enabled || false,
+                enabled: isEnabled,
                 ip_address: snmpConfig.ip_address!,
                 port: snmpConfig.port || 161,
                 community: snmpConfig.community || 'public',
                 version: snmpConfig.version || '2c',
             });
             
-            // Сразу проверяем SNMP после сохранения и ждем результат
-            try {
-                const { checkSNMPStatus } = await import('@/app/api');
-                const statusResult = await checkSNMPStatus(equipment.id!);
-                const statusText = statusResult.status === 'up' ? 'Работает' : 
-                                 statusResult.status === 'down' ? 'Не отвечает' : 
-                                 statusResult.status === 'error' ? 'Ошибка' : 'Неизвестно';
-                alert(`SNMP конфигурация сохранена!\nСтатус проверки: ${statusText}${statusResult.response_time ? ` (${Math.round(statusResult.response_time)}ms)` : ''}`);
-            } catch (checkError: any) {
-                console.warn('Не удалось проверить SNMP сразу:', checkError);
-                alert(`SNMP конфигурация сохранена, но проверка не удалась: ${checkError.message || 'Неизвестная ошибка'}`);
+            // Проверяем SNMP только если он включен
+            if (isEnabled) {
+                try {
+                    const { checkSNMPStatus } = await import('@/app/api');
+                    const statusResult = await checkSNMPStatus(equipment.id!);
+                    const statusText = statusResult.status === 'up' ? 'Работает' : 
+                                     statusResult.status === 'down' ? 'Не отвечает' : 
+                                     statusResult.status === 'error' ? 'Ошибка' : 'Неизвестно';
+                    alert(`SNMP конфигурация сохранена!\nСтатус проверки: ${statusText}${statusResult.response_time ? ` (${Math.round(statusResult.response_time)}ms)` : ''}`);
+                } catch (checkError: any) {
+                    console.warn('Не удалось проверить SNMP сразу:', checkError);
+                    alert(`SNMP конфигурация сохранена, но проверка не удалась: ${checkError.message || 'Неизвестная ошибка'}`);
+                }
+            } else {
+                alert('SNMP мониторинг отключен. Конфигурация сохранена.');
             }
             
             // Обновляем страницу для загрузки новой конфигурации

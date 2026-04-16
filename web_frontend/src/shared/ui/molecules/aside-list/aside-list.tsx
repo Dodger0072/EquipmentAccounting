@@ -11,7 +11,8 @@ export const AsideList = () => {
         text='Администрирование'
         children={[
           { to: '/admin/categories', text: 'Категории' },
-          { to: '/admin/manufacturers', text: 'Производители' }
+          { to: '/admin/manufacturers', text: 'Производители' },
+          { to: '/admin/classrooms', text: 'Аудитории' }
         ]}
       />
       <Link to='/search' text='Поиск по сайту'/>

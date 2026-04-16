@@ -80,13 +80,22 @@ class DeviceSNMPConfig(Base):
             # Обновляем существующую конфигурацию
             for key, value in config_data.items():
                 if hasattr(existing, key):
+                    # Явно устанавливаем значение, включая None для очистки полей
                     setattr(existing, key, value)
+            await session.flush()  # Отправляем изменения в базу, но не коммитим
+            await session.refresh(existing)  # Обновляем объект из базы
             await session.commit()
             return existing
         else:
             # Создаем новую конфигурацию
             config_data['device_id'] = device_id
-            new_config = cls(**config_data)
+            # Удаляем None значения для новых записей, но сохраняем status если он 'disabled'
+            # Это нужно для того, чтобы при создании конфигурации с enabled=False статус был 'disabled'
+            clean_config = {}
+            for k, v in config_data.items():
+                if v is not None or k == 'status':
+                    clean_config[k] = v
+            new_config = cls(**clean_config)
             session.add(new_config)
             await session.commit()
             return new_config

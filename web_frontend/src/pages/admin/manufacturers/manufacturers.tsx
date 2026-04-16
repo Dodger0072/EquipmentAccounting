@@ -88,7 +88,7 @@ export const ManufacturersPage: React.FC = () => {
   // Фильтрация производителей по выбранной категории
   const filteredManufacturers = selectedCategory 
     ? manufacturers.filter(m => m.category_id === selectedCategory)
-    : [];
+    : manufacturers;
 
   const categoryOptions = categories.map(cat => ({
     label: cat.name,
@@ -105,15 +105,13 @@ export const ManufacturersPage: React.FC = () => {
             : 'Управление производителями'
           }
         </Text>
-        {selectedCategory && (
-          <Button 
-            label="Добавить производителя" 
-            onClick={() => {
-              setFormData({ name: '', description: '', category_id: selectedCategory });
-              setIsModalOpen(true);
-            }}
-          />
-        )}
+        <Button 
+          label="Добавить производителя" 
+          onClick={() => {
+            setFormData({ name: '', description: '', category_id: selectedCategory });
+            setIsModalOpen(true);
+          }}
+        />
       </Header>
       
       <FilterSection>
@@ -155,52 +153,56 @@ export const ManufacturersPage: React.FC = () => {
         </ErrorMessage>
       )}
 
-      {selectedCategory ? (
-        <Content>
-          {isLoading ? (
-            <Text>Загрузка...</Text>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHeaderCell>№</TableHeaderCell>
-                  <TableHeaderCell>Название</TableHeaderCell>
-                  <TableHeaderCell>Описание</TableHeaderCell>
-                  <TableHeaderCell>Действия</TableHeaderCell>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredManufacturers.map((manufacturer, index) => (
-                  <TableRow key={manufacturer.id}>
-                    <TableCell>{index + 1}</TableCell>
-                    <TableCell>{manufacturer.name}</TableCell>
-                    <TableCell>{manufacturer.description || '-'}</TableCell>
-                    <TableCell>
-                      <Button 
-                        size="s" 
-                        label="Редактировать" 
-                        onClick={() => handleEdit(manufacturer)}
-                      />
-                      <Button 
-                        size="s" 
-                        label="Удалить" 
-                        view="ghost"
-                        onClick={() => handleDelete(manufacturer.id)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </Content>
-      ) : (
-        <Content>
+      <Content>
+        {isLoading ? (
+          <Text>Загрузка...</Text>
+        ) : filteredManufacturers.length === 0 ? (
           <Text size="l" style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>
-            Выберите категорию для просмотра производителей
+            {selectedCategory 
+              ? 'В выбранной категории нет производителей'
+              : 'Нет производителей'}
           </Text>
-        </Content>
-      )}
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHeaderCell>№</TableHeaderCell>
+                <TableHeaderCell>Название</TableHeaderCell>
+                <TableHeaderCell>Описание</TableHeaderCell>
+                {selectedCategory === null && <TableHeaderCell>Категория</TableHeaderCell>}
+                <TableHeaderCell>Действия</TableHeaderCell>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredManufacturers.map((manufacturer, index) => (
+                <TableRow key={manufacturer.id}>
+                  <TableCell>{index + 1}</TableCell>
+                  <TableCell>{manufacturer.name}</TableCell>
+                  <TableCell>{manufacturer.description || '-'}</TableCell>
+                  {selectedCategory === null && (
+                    <TableCell>
+                      {categories.find(c => c.id === manufacturer.category_id)?.name || '-'}
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <Button 
+                      size="s" 
+                      label="Редактировать" 
+                      onClick={() => handleEdit(manufacturer)}
+                    />
+                    <Button 
+                      size="s" 
+                      label="Удалить" 
+                      view="ghost"
+                      onClick={() => handleDelete(manufacturer.id)}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Content>
 
       <Modal isOpen={isModalOpen} onClose={handleCloseModal}>
         <ModalContent>

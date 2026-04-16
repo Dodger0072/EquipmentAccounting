@@ -1,7 +1,9 @@
 export const getCurLocationText = (path: string) => {
   switch (path.toLowerCase()) {
     case '/':
-      return 'Авторизация';
+      return 'Оборудование';
+    case '/equipment':
+      return 'Оборудование';
     case '/map':
       return 'Карта';
     case '/search':
@@ -23,6 +25,8 @@ export const getCurLocationText = (path: string) => {
     case '/admin/categories':
       return 'Администрирование'
     case '/admin/manufacturers':
+      return 'Администрирование'
+    case '/admin/classrooms':
       return 'Администрирование'
     default:
       return 'Оборудование';

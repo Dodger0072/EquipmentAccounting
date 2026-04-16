@@ -16,7 +16,7 @@ async def main():
 #     await user.save(session=session)
 #     use = await User.get_user(telegram_id=15, session=session)
 #     user_name = use.username
-#     print(user_name)
+#     print(user_name)  
 
     await test()
 
@@ -38,7 +38,7 @@ async def test(session: AsyncSession):
     test_device1 = device(
         name="Test Device1",
         category="Test Category1",
-        place_id="2",  # String type as defined in model
+        place_id="2",  
         version="2.0",
         releaseDate=datetime.now().date(),
         softwareStartDate=datetime.now().date(),

@@ -4,5 +4,6 @@ from .user import User
 from .category import category
 from .manufacturer import manufacturer
 from .device_snmp_config import DeviceSNMPConfig
+from .classroom import classroom
 
-__all__ = ["device", "place", "User", "category", "manufacturer", "DeviceSNMPConfig"]
+__all__ = ["device", "place", "User", "category", "manufacturer", "DeviceSNMPConfig", "classroom"]

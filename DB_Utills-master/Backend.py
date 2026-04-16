@@ -6,8 +6,9 @@ from models.device import device
 from models.place import place
 from models.category import category
 from models.manufacturer import manufacturer
+from models.classroom import classroom
 from models.db_session import create_session, Base
-from schemas import EquipmentCreate, EquipmentUpdate, CategoryCreate, CategoryUpdate, CategoryResponse, ManufacturerCreate, ManufacturerUpdate, ManufacturerResponse
+from schemas import EquipmentCreate, EquipmentUpdate, CategoryCreate, CategoryUpdate, CategoryResponse, ManufacturerCreate, ManufacturerUpdate, ManufacturerResponse, ClassroomCreate, ClassroomUpdate, ClassroomResponse
 from datetime import datetime
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,8 +25,11 @@ except ImportError as e:
     SNMPService = None
 
 from models.device_snmp_config import DeviceSNMPConfig
+from models.config import Settings
 from sqlalchemy import select
 
+# Инициализация настроек
+settings = Settings()
 
 # Инициализация базы данных при запуске
 from contextlib import asynccontextmanager
@@ -35,6 +39,22 @@ async def lifespan(app: FastAPI):
     # Startup
     from models.db_session import global_init
     await global_init()
+    
+    # Создаем дефолтные места, если их нет
+    async with create_session() as db:
+        existing_places = await place.get_all_places(db)
+        if not existing_places:
+            # Создаем дефолтные места
+            default_places = [
+                place(name="Этаж 2"),
+                place(name="Этаж 3"),
+                place(name="Этаж 4"),
+            ]
+            for p in default_places:
+                db.add(p)
+            await db.commit()
+            print("Созданы дефолтные места (карты)")
+    
     yield
     # Shutdown
     pass
@@ -61,6 +81,13 @@ async def options_handler(request: Request, path: str):
             "Access-Control-Allow-Credentials": "true",
         }
     )
+
+@app.get("/places", tags=["Карты"])
+async def get_places():
+    """Получить все карты (места)"""
+    async with create_session() as db:
+        places = await place.get_all_places(db)
+        return [{"id": p.id, "name": p.name} for p in places]
 
 @app.post("/add_place", tags=["оборудование"])
 async def add_place(place_data: dict):
@@ -178,8 +205,14 @@ async def get_device_by_id(device_id: int):
         # Добавляем SNMP конфигурацию если есть
         if snmp_config:
             snmp_config_dict = snmp_config.to_dict()
+            # Если SNMP отключен, очищаем статус в возвращаемых данных, чтобы фронтенд не показывал его
+            if not snmp_config.enabled:
+                snmp_config_dict['status'] = None
+                snmp_config_dict['response_time'] = None
+                snmp_config_dict['last_check'] = None
             device_dict["snmp_config"] = snmp_config_dict
-            if snmp_config.status:
+            # НЕ возвращаем статус если SNMP отключен или статус 'disabled'
+            if snmp_config.enabled and snmp_config.status and snmp_config.status != 'disabled':
                 device_dict["snmp_status"] = {
                     "status": snmp_config.status,
                     "message": f"Last check: {snmp_config.last_check.isoformat() if snmp_config.last_check else 'Never'}",
@@ -199,9 +232,10 @@ async def get_device_qr_code(device_id: int):
         if not db_device:
             raise HTTPException(status_code=404, detail="Device not found")
         
-        # Создаем URL для QR кода
-        # В продакшене нужно будет заменить на реальный домен
-        frontend_url = "http://localhost:5173"  # Можно вынести в конфиг
+        # Создаем URL для QR кода из конфигурации
+        # URL фронтенда можно задать через переменную окружения FRONTEND_URL
+        # Например: export FRONTEND_URL="http://university.local:5173"
+        frontend_url = settings.FRONTEND_URL
         qr_url = f"{frontend_url}/equipment/{device_id}"
         
         # Генерируем QR код
@@ -263,9 +297,15 @@ async def search_devices():
             # Добавляем SNMP конфигурацию если есть
             if snmp_config:
                 snmp_config_dict = snmp_config.to_dict()
+                # Если SNMP отключен, очищаем статус в возвращаемых данных, чтобы фронтенд не показывал его
+                if not snmp_config.enabled:
+                    snmp_config_dict['status'] = None
+                    snmp_config_dict['response_time'] = None
+                    snmp_config_dict['last_check'] = None
                 device_dict["snmp_config"] = snmp_config_dict
                 # Также добавляем статус как отдельное поле для удобства
-                if snmp_config.status:
+                # НЕ возвращаем статус если SNMP отключен или статус 'disabled'
+                if snmp_config.enabled and snmp_config.status and snmp_config.status != 'disabled':
                     device_dict["snmp_status"] = {
                         "status": snmp_config.status,
                         "message": f"Last check: {snmp_config.last_check.isoformat() if snmp_config.last_check else 'Never'}",
@@ -565,6 +605,131 @@ async def delete_manufacturer(manufacturer_id: int):
         
         return {"message": f"Manufacturer {manufacturer_id} deleted successfully"}
 
+# API endpoints для аудиторий
+@app.get("/classrooms", tags=["Аудитории"])
+async def get_classrooms():
+    """Получить все аудитории"""
+    async with create_session() as db:
+        classrooms = await classroom.get_all_classrooms(db)
+        return [cls.to_dict() for cls in classrooms]
+
+@app.get("/classrooms/map/{map_id}", tags=["Аудитории"])
+async def get_classrooms_by_map(map_id: int):
+    """Получить все аудитории для конкретной карты"""
+    async with create_session() as db:
+        classrooms = await classroom.get_classrooms_by_map(db, map_id)
+        return [cls.to_dict() for cls in classrooms]
+
+@app.get("/classrooms/find-by-point", tags=["Аудитории"])
+async def find_classroom_by_point(map_id: int, x: float, y: float):
+    """Найти аудиторию по координатам точки на карте"""
+    async with create_session() as db:
+        found_classroom = await classroom.find_classroom_by_point(db, map_id, x, y)
+        if not found_classroom:
+            return {"classroom": None}
+        return {"classroom": found_classroom.to_dict()}
+
+@app.post("/classrooms", tags=["Аудитории"])
+async def create_classroom(classroom_data: ClassroomCreate):
+    """Создать новую аудиторию"""
+    async with create_session() as db:
+        # Проверяем, существует ли карта
+        place_result = await db.execute(select(place).where(place.id == classroom_data.map_id))
+        place_obj = place_result.scalar_one_or_none()
+        
+        # Если карта не найдена, создаем её автоматически
+        if not place_obj:
+            # Создаем новое место с именем по умолчанию
+            new_place = place(name=f"Карта {classroom_data.map_id}")
+            db.add(new_place)
+            await db.commit()
+            await db.refresh(new_place)
+            # Если ID не совпадает, обновляем map_id
+            if new_place.id != classroom_data.map_id:
+                # Используем созданный ID
+                classroom_data.map_id = new_place.id
+        
+        # Проверяем валидность полигона
+        if not classroom_data.polygon_coordinates or len(classroom_data.polygon_coordinates) < 3:
+            raise HTTPException(status_code=400, detail="Polygon must have at least 3 points")
+        
+        new_classroom = await classroom.insert_classroom(db, classroom_data.model_dump())
+        return new_classroom.to_dict()
+
+@app.get("/classrooms/{classroom_id}", tags=["Аудитории"])
+async def get_classroom(classroom_id: int):
+    """Получить аудиторию по ID"""
+    async with create_session() as db:
+        cls = await classroom.get_classroom_by_id(db, classroom_id)
+        if not cls:
+            raise HTTPException(status_code=404, detail="Classroom not found")
+        return cls.to_dict()
+
+@app.put("/classrooms/{classroom_id}", tags=["Аудитории"])
+async def update_classroom(classroom_id: int, classroom_data: ClassroomUpdate):
+    """Обновить аудиторию"""
+    async with create_session() as db:
+        existing = await classroom.get_classroom_by_id(db, classroom_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Classroom not found")
+        
+        # Если обновляется map_id, проверяем существование карты
+        if classroom_data.map_id and classroom_data.map_id != existing.map_id:
+            place_result = await db.execute(select(place).where(place.id == classroom_data.map_id))
+            if not place_result.scalar_one_or_none():
+                raise HTTPException(status_code=404, detail="Map not found")
+        
+        # Проверяем валидность полигона если он обновляется
+        if classroom_data.polygon_coordinates and len(classroom_data.polygon_coordinates) < 3:
+            raise HTTPException(status_code=400, detail="Polygon must have at least 3 points")
+        
+        update_data = {k: v for k, v in classroom_data.model_dump().items() if v is not None}
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No data to update")
+        
+        updated_classroom = await classroom.update_classroom(db, classroom_id, update_data)
+        return updated_classroom.to_dict()
+
+@app.delete("/classrooms/{classroom_id}", tags=["Аудитории"])
+async def delete_classroom(classroom_id: int):
+    """Удалить аудиторию"""
+    try:
+        async with create_session() as db:
+            existing = await classroom.get_classroom_by_id(db, classroom_id)
+            if not existing:
+                raise HTTPException(status_code=404, detail="Classroom not found")
+            
+            # Проверяем, есть ли связанные устройства
+            related_devices = await classroom.get_devices_by_classroom(db, existing.name)
+            if related_devices and len(related_devices) > 0:
+                # Преобразуем устройства в словари синхронно, так как они уже загружены
+                devices_list = []
+                for d in related_devices:
+                    devices_list.append({
+                        'id': d.id,
+                        'name': d.name,
+                        'category': d.category,
+                        'place_id': d.place_id,
+                    })
+                raise HTTPException(
+                    status_code=400, 
+                    detail={
+                        "message": f"Нельзя удалить аудиторию '{existing.name}', так как к ней привязаны устройства",
+                        "devices": devices_list
+                    }
+                )
+            
+            success = await classroom.delete_classroom(db, classroom_id)
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to delete classroom")
+            
+            return {"message": f"Classroom {classroom_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting classroom {classroom_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 # SNMP Monitoring Endpoints
 snmp_service = SNMPService() if SNMP_AVAILABLE else None
 
@@ -731,9 +896,14 @@ async def create_or_update_snmp_config(snmp_config_data: dict, db: AsyncSession 
         if not device_obj:
             raise HTTPException(status_code=404, detail="Device not found")
         
+        # Получаем значение enabled (явно проверяем на False, чтобы не использовать default)
+        enabled_value = snmp_config_data.get('enabled')
+        if enabled_value is None:
+            enabled_value = True  # По умолчанию включено
+        
         # Подготавливаем данные для конфигурации
         config_data = {
-            'enabled': snmp_config_data.get('enabled', True),
+            'enabled': enabled_value,
             'ip_address': snmp_config_data['ip_address'],
             'port': snmp_config_data.get('port', 161),
             'community': snmp_config_data.get('community', 'public'),
@@ -747,8 +917,24 @@ async def create_or_update_snmp_config(snmp_config_data: dict, db: AsyncSession 
             'check_interval': snmp_config_data.get('check_interval', 300)
         }
         
-        # Удаляем None значения
-        config_data = {k: v for k, v in config_data.items() if v is not None}
+        # Если SNMP отключен, очищаем статус и связанные поля
+        # Важно: явно устанавливаем эти поля, чтобы очистить их в базе данных
+        if not enabled_value:
+            # Используем специальное значение для очистки статуса
+            # В базе будет храниться 'disabled', но при возврате данных мы его очистим
+            config_data['status'] = 'disabled'
+            config_data['response_time'] = None
+            config_data['last_check'] = None
+        
+        # Сохраняем все поля, включая None значения для явной очистки
+        # Но фильтруем None для остальных полей
+        if not enabled_value:
+            # При отключении сохраняем все поля, включая None для response_time и last_check
+            # чтобы явно очистить их в базе
+            pass  # Оставляем все поля в config_data
+        else:
+            # При включении удаляем None значения
+            config_data = {k: v for k, v in config_data.items() if v is not None}
         
         # Создаем или обновляем конфигурацию
         snmp_config = await DeviceSNMPConfig.create_or_update(db, device_id, config_data)

@@ -12,13 +12,22 @@ interface Route {
 const getAllRoutes = (routeArray: { path: string; name: string; children?: any[] }[]): Route[] => {
   const routes: Route[] = [];
   let adminParentAdded = false;
+  const seenNames = new Set<string>();
   
   routeArray.forEach((route) => {
     const routeName = route.name;
     
+    // Пропускаем основной маршрут /admin, он будет добавлен как родитель для подмаршрутов
+    if (route.path === '/admin') {
+      return;
+    }
+    
     // Обработка маршрутов с детьми
     if (route.children) {
-      routes.push({ name: routeName, path: route.path });
+      if (!seenNames.has(routeName)) {
+        routes.push({ name: routeName, path: route.path });
+        seenNames.add(routeName);
+      }
       route.children.forEach((child) => {
         routes.push({ name: child.name, path: child.path, parent: routeName });
       });
@@ -32,9 +41,12 @@ const getAllRoutes = (routeArray: { path: string; name: string; children?: any[]
       }
       routes.push({ name: route.name, path: route.path, parent: 'Администрирование' });
     }
-    // Обычные маршруты
+    // Обычные маршруты (пропускаем дубликаты по имени)
     else {
-      routes.push({ name: routeName, path: route.path });
+      if (!seenNames.has(routeName)) {
+        routes.push({ name: routeName, path: route.path });
+        seenNames.add(routeName);
+      }
     }
   });
   
