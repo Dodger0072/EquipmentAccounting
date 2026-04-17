@@ -56,6 +56,10 @@ export type DiscoveredDevice = {
   snmp_version: string;
   response_time_ms: number;
   has_snmp: boolean;
+  /** ответил на ICMP в рамках сканирования */
+  seen_icmp?: boolean;
+  /** был в ARP-таблице ОС сканера */
+  seen_arp?: boolean;
 };
 
 export type DiscoveryResult = {
@@ -63,4 +67,8 @@ export type DiscoveryResult = {
   total_scanned: number;
   total_found: number;
   scan_time: number;
+  /** false, если на сервере нет pysnmp — SNMP в таблице не появится */
+  snmp_library_available?: boolean;
+  /** IP машины, где выполнялся скан (тот же хост, что и Backend) */
+  scanner_host_ip?: string;
 };

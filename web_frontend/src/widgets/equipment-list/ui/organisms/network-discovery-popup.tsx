@@ -14,15 +14,37 @@ interface NetworkDiscoveryPopupProps {
 
 type ScanState = 'idle' | 'scanning' | 'done' | 'error';
 
+function renderDiscoverySource(dev: DiscoveredDevice) {
+    if (dev.has_snmp) {
+        return <SourceBadge kind="snmp">SNMP</SourceBadge>;
+    }
+    const icmp = Boolean(dev.seen_icmp);
+    const arp = Boolean(dev.seen_arp);
+    if (icmp && arp) {
+        return <SourceBadge kind="mixed">ICMP+ARP</SourceBadge>;
+    }
+    if (icmp) {
+        return <SourceBadge kind="icmp">ICMP</SourceBadge>;
+    }
+    return <SourceBadge kind="arp">ARP</SourceBadge>;
+}
+
 export const NetworkDiscoveryPopup: React.FC<NetworkDiscoveryPopupProps> = ({ onClose, onImported }) => {
     const [subnet, setSubnet] = useState('');
     const [community, setCommunity] = useState('public');
-    const [timeout, setTimeout_] = useState('1');
+    const [timeout, setTimeout_] = useState('2');
+    const [pingTimeoutMs, setPingTimeoutMs] = useState('1200');
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     const [scanState, setScanState] = useState<ScanState>('idle');
     const [discovered, setDiscovered] = useState<DiscoveredDevice[]>([]);
-    const [scanInfo, setScanInfo] = useState({ total_scanned: 0, total_found: 0, scan_time: 0 });
+    const [scanInfo, setScanInfo] = useState({
+        total_scanned: 0,
+        total_found: 0,
+        scan_time: 0,
+        scanner_host_ip: '',
+        snmp_library_available: true as boolean,
+    });
     const [errorMessage, setErrorMessage] = useState('');
 
     const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -56,12 +78,19 @@ export const NetworkDiscoveryPopup: React.FC<NetworkDiscoveryPopupProps> = ({ on
 
         try {
             const communities = community.split(',').map(c => c.trim()).filter(Boolean);
-            const result = await discoverDevices(subnet, communities, parseFloat(timeout) || 1);
+            const result = await discoverDevices(
+                subnet,
+                communities,
+                parseFloat(timeout) || 2,
+                parseInt(pingTimeoutMs, 10) || 1200,
+            );
             setDiscovered(result.discovered);
             setScanInfo({
                 total_scanned: result.total_scanned,
                 total_found: result.total_found,
                 scan_time: result.scan_time,
+                scanner_host_ip: result.scanner_host_ip ?? '',
+                snmp_library_available: result.snmp_library_available !== false,
             });
             setScanState('done');
         } catch (err: any) {
@@ -163,7 +192,7 @@ export const NetworkDiscoveryPopup: React.FC<NetworkDiscoveryPopupProps> = ({ on
                                 />
                             </FormField>
                             <FormField style={{ flex: 0.5 }}>
-                                <Label>Таймаут (сек)</Label>
+                                <Label>Таймаут SNMP (сек)</Label>
                                 <InputField
                                     type="number"
                                     min="0.5"
@@ -171,6 +200,17 @@ export const NetworkDiscoveryPopup: React.FC<NetworkDiscoveryPopupProps> = ({ on
                                     step="0.5"
                                     value={timeout}
                                     onChange={e => setTimeout_(e.target.value)}
+                                />
+                            </FormField>
+                            <FormField style={{ flex: 0.5 }}>
+                                <Label>Ping (мс)</Label>
+                                <InputField
+                                    type="number"
+                                    min="500"
+                                    max="5000"
+                                    step="100"
+                                    value={pingTimeoutMs}
+                                    onChange={e => setPingTimeoutMs(e.target.value)}
                                 />
                             </FormField>
                         </FormRow>
@@ -181,7 +221,10 @@ export const NetworkDiscoveryPopup: React.FC<NetworkDiscoveryPopupProps> = ({ on
                     <ScanningOverlay>
                         <BigSpinner />
                         <ScanningText>Идёт сканирование подсети {subnet}...</ScanningText>
-                        <ScanningHint>Поиск устройств через ARP + SNMP, обычно 3–10 секунд</ScanningHint>
+                        <ScanningHint>
+                            ICMP по всей подсети с этой машины (где запущен Backend), затем SNMP. На Wi‑Fi часть
+                            хостов может быть скрыта изоляцией клиентов в роутере.
+                        </ScanningHint>
                         <ProgressBar><ProgressFill /></ProgressBar>
                     </ScanningOverlay>
                 )}
@@ -197,6 +240,18 @@ export const NetworkDiscoveryPopup: React.FC<NetworkDiscoveryPopupProps> = ({ on
                         Найдено: <b>{scanInfo.total_found}</b> устройств
                         &nbsp;&middot;&nbsp;
                         Время: <b>{scanInfo.scan_time}</b> сек
+                        {scanInfo.scanner_host_ip ? (
+                            <>
+                                &nbsp;&middot;&nbsp;
+                                Сканер (Backend): <b>{scanInfo.scanner_host_ip}</b>
+                            </>
+                        ) : null}
+                        {!scanInfo.snmp_library_available ? (
+                            <ScanWarn>
+                                На сервере не установлен pysnmp — опрос SNMP отключён. Установите:{' '}
+                                <code>pip install pysnmp</code>
+                            </ScanWarn>
+                        ) : null}
                     </ScanSummary>
                 )}
 
@@ -239,13 +294,7 @@ export const NetworkDiscoveryPopup: React.FC<NetworkDiscoveryPopupProps> = ({ on
                                             <Td><code>{dev.ip}</code></Td>
                                             <Td><MacCell>{dev.mac || '—'}</MacCell></Td>
                                             <Td>{dev.name || '—'}</Td>
-                                            <Td>
-                                                {dev.has_snmp ? (
-                                                    <SourceBadge kind="snmp">SNMP</SourceBadge>
-                                                ) : (
-                                                    <SourceBadge kind="ping">ARP</SourceBadge>
-                                                )}
-                                            </Td>
+                                            <Td>{renderDiscoverySource(dev)}</Td>
                                             <Td>
                                                 {dev.device_type_guess ? (
                                                     <DeviceTypeBadge type={dev.device_type_guess}>
@@ -541,6 +590,17 @@ const ScanSummary = styled('div', {
     borderBottom: '1px solid #f3f4f6',
 });
 
+const ScanWarn = styled('div', {
+    marginTop: '8px',
+    padding: '8px 10px',
+    fontSize: '12px',
+    color: '#92400e',
+    backgroundColor: '#fffbeb',
+    borderRadius: '6px',
+    border: '1px solid #fde68a',
+    '& code': { fontSize: '11px' },
+});
+
 const TableContainer = styled('div', {
     flex: 1,
     overflowY: 'auto',
@@ -608,7 +668,9 @@ const SourceBadge = styled('span', {
     variants: {
         kind: {
             snmp: { backgroundColor: '#d1fae5', color: '#065f46' },
-            ping: { backgroundColor: '#fef3c7', color: '#92400e' },
+            icmp: { backgroundColor: '#dbeafe', color: '#1e40af' },
+            arp: { backgroundColor: '#fef3c7', color: '#92400e' },
+            mixed: { backgroundColor: '#e0e7ff', color: '#3730a3' },
         },
     },
 });

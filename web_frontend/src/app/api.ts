@@ -253,12 +253,18 @@ export async function getLocalSubnet(): Promise<{ subnet: string; local_ip: stri
 export async function discoverDevices(
   subnet: string,
   communities: string[] = ['public'],
-  timeout: number = 1.0,
+  timeout: number = 2.0,
+  pingTimeoutMs: number = 1200,
 ): Promise<DiscoveryResult> {
   const response = await fetch(`${backendUrl}/snmp/discover`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subnet, communities, timeout }),
+    body: JSON.stringify({
+      subnet,
+      communities,
+      timeout,
+      ping_timeout_ms: pingTimeoutMs,
+    }),
   });
   if (!response.ok) {
     const errorText = await response.text();

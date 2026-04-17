@@ -1047,11 +1047,11 @@ async def discover_network_devices(body: dict):
         raise HTTPException(status_code=400, detail="Missing required field: subnet")
 
     communities = body.get("communities", ["public"])
-    timeout = body.get("timeout", 1.0)
+    timeout = body.get("timeout", 2.0)
     port = body.get("port", 161)
-    ping_timeout_ms = int(body.get("ping_timeout_ms", 900))
+    ping_timeout_ms = int(body.get("ping_timeout_ms", 1200))
 
-    svc = NetworkDiscoveryService(timeout=float(timeout), retries=0, concurrency=50)
+    svc = NetworkDiscoveryService(timeout=float(timeout), retries=1, concurrency=50)
     try:
         result = await svc.discover(
             subnet,

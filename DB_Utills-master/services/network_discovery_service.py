@@ -99,6 +99,9 @@ class DiscoveredDevice:
     snmp_version: str
     response_time_ms: float
     has_snmp: bool = False
+    # Как хост попал в список (для UI; SNMP — отдельно через has_snmp)
+    seen_icmp: bool = False
+    seen_arp: bool = False
 
 
 def _guess_manufacturer(sys_descr: str) -> str:
@@ -327,13 +330,27 @@ async def _try_resolve_hostname(ip: str) -> str:
 class NetworkDiscoveryService:
     """Scans a subnet: ping to find live hosts, then SNMP for details."""
 
-    def __init__(self, timeout: float = 1.0, retries: int = 0, concurrency: int = 50):
+    def __init__(
+        self,
+        timeout: float = 1.0,
+        retries: int = 0,
+        concurrency: int = 50,
+        snmp_concurrency: int = 20,
+    ):
         self.timeout = timeout
         self.retries = retries
         self.concurrency = concurrency
+        # Меньше параллельных SNMP — стабильнее на Wi‑Fi и при строгом файрволе
+        self.snmp_concurrency = max(1, snmp_concurrency)
 
     async def _snmp_get(
-        self, engine, ip: str, port: int, community: str, oid: str,
+        self,
+        engine,
+        ip: str,
+        port: int,
+        community: str,
+        oid: str,
+        local_bind: Optional[str] = None,
     ) -> Optional[str]:
         if not _SNMP_AVAILABLE:
             return None
@@ -341,6 +358,8 @@ class NetworkDiscoveryService:
             transport = await UdpTransportTarget.create(
                 (ip, port), timeout=self.timeout, retries=self.retries,
             )
+            if local_bind:
+                transport.set_local_address((local_bind, 0))
             error_indication, error_status, _error_index, var_binds = await get_cmd(
                 engine,
                 CommunityData(community, mpModel=1),
@@ -359,7 +378,12 @@ class NetworkDiscoveryService:
             return None
 
     async def _snmp_probe(
-        self, engine, ip: str, port: int, communities: List[str],
+        self,
+        engine,
+        ip: str,
+        port: int,
+        communities: List[str],
+        local_bind: Optional[str] = None,
     ) -> Optional[dict]:
         """Try SNMP on a host. Returns dict with info or None."""
         if not _SNMP_AVAILABLE:
@@ -367,14 +391,16 @@ class NetworkDiscoveryService:
 
         for community in communities:
             sys_descr = await self._snmp_get(
-                engine, ip, port, community, SYSTEM_OIDS['sysDescr'],
+                engine, ip, port, community, SYSTEM_OIDS['sysDescr'], local_bind,
             )
             if sys_descr is None:
                 continue
 
             oid_keys = ['sysName', 'sysUpTime', 'sysLocation', 'sysContact']
             tasks = [
-                self._snmp_get(engine, ip, port, community, SYSTEM_OIDS[k])
+                self._snmp_get(
+                    engine, ip, port, community, SYSTEM_OIDS[k], local_bind,
+                )
                 for k in oid_keys
             ]
             values = await asyncio.gather(*tasks)
@@ -385,12 +411,22 @@ class NetworkDiscoveryService:
         return None
 
     async def _enrich_host(
-        self, engine, ip: str, mac: str, port: int,
-        communities: List[str], semaphore: asyncio.Semaphore,
+        self,
+        engine,
+        ip: str,
+        mac: str,
+        port: int,
+        communities: List[str],
+        semaphore: asyncio.Semaphore,
+        local_bind: Optional[str],
+        seen_icmp: bool,
+        seen_arp: bool,
     ) -> DiscoveredDevice:
         """Для живого хоста: SNMP + обратный DNS."""
         async with semaphore:
-            snmp_info = await self._snmp_probe(engine, ip, port, communities)
+            snmp_info = await self._snmp_probe(
+                engine, ip, port, communities, local_bind,
+            )
             hostname = await _try_resolve_hostname(ip)
 
             if snmp_info:
@@ -409,6 +445,8 @@ class NetworkDiscoveryService:
                     snmp_version='2c',
                     response_time_ms=0,
                     has_snmp=True,
+                    seen_icmp=seen_icmp,
+                    seen_arp=seen_arp,
                 )
             else:
                 mac_vendor = _guess_vendor_from_mac(mac)
@@ -426,6 +464,8 @@ class NetworkDiscoveryService:
                     snmp_version='',
                     response_time_ms=0,
                     has_snmp=False,
+                    seen_icmp=seen_icmp,
+                    seen_arp=seen_arp,
                 )
 
     async def discover(
@@ -433,7 +473,7 @@ class NetworkDiscoveryService:
         subnet: str,
         communities: Optional[List[str]] = None,
         port: int = 161,
-        ping_timeout_ms: int = 900,
+        ping_timeout_ms: int = 1200,
     ) -> Dict[str, Any]:
         if communities is None:
             communities = ['public']
@@ -466,6 +506,8 @@ class NetworkDiscoveryService:
         if local_ip and local_mac:
             mac_by_ip[local_ip] = local_mac
 
+        arp_seen_ips: Set[str] = set(arp_before.keys()) | set(arp_after.keys())
+
         targets: Set[str] = set(alive)
         targets.update(mac_by_ip.keys())
         if local_ip:
@@ -477,10 +519,14 @@ class NetworkDiscoveryService:
                 'total_scanned': total_scanned,
                 'total_found': 0,
                 'scan_time': round(time.time() - start_time, 2),
+                'snmp_library_available': _SNMP_AVAILABLE,
+                'scanner_host_ip': local_ip or '',
             }
 
         engine = SnmpEngine() if _SNMP_AVAILABLE else None
-        semaphore = asyncio.Semaphore(self.concurrency)
+        snmp_sem = asyncio.Semaphore(self.snmp_concurrency)
+        sorted_ips = sorted(targets, key=lambda x: tuple(int(p) for p in x.split('.')))
+        local_bind = local_ip or None
 
         tasks = [
             self._enrich_host(
@@ -489,9 +535,12 @@ class NetworkDiscoveryService:
                 mac_by_ip.get(ip, '') if ip != local_ip else (local_mac or mac_by_ip.get(ip, '')),
                 port,
                 communities,
-                semaphore,
+                snmp_sem,
+                local_bind,
+                ip in alive,
+                ip in arp_seen_ips,
             )
-            for ip in sorted(targets, key=lambda x: tuple(int(p) for p in x.split('.')))
+            for ip in sorted_ips
         ]
         results = await asyncio.gather(*tasks)
 
@@ -504,4 +553,6 @@ class NetworkDiscoveryService:
             'total_scanned': total_scanned,
             'total_found': len(discovered),
             'scan_time': scan_time,
+            'snmp_library_available': _SNMP_AVAILABLE,
+            'scanner_host_ip': local_ip or '',
         }
