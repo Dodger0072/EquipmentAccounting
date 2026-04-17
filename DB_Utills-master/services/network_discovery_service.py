@@ -1,14 +1,20 @@
 """
-Network Discovery Service — сканирование подсети через ping + SNMP.
-Ping находит все живые хосты, SNMP собирает детальную информацию.
+Network Discovery Service — сканирование подсети через ICMP + ARP + SNMP.
+ICMP обходит все адреса в подсети; ARP даёт MAC; SNMP — детали (если доступен).
 """
 import asyncio
 import ipaddress
-import time
-import re
 import logging
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+import platform
+import re
+import subprocess
+import sys
+import time
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, List, Optional, Set
+
+# Максимум хостов за один проход (защита от случайного /8)
+_MAX_SUBNET_HOSTS = 4094
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +224,67 @@ def _parse_arp_table(subnet_str: str) -> Dict[str, str]:
     return result
 
 
+def _ping_argv(ip: str, timeout_ms: int) -> List[str]:
+    """Аргументы системного ping для текущей ОС."""
+    system = platform.system()
+    if system == 'Windows':
+        w = max(500, min(int(timeout_ms), 60_000))
+        return ['ping', '-n', '1', '-w', str(w), ip]
+    if system == 'Darwin':
+        # Таймаут ограничиваем через asyncio.wait_for вокруг proc.wait()
+        return ['ping', '-c', '1', ip]
+    w = max(1, int((timeout_ms + 999) // 1000))
+    return ['ping', '-c', '1', '-W', str(w), ip]
+
+
+async def _icmp_reachable(ip: str, timeout_ms: int) -> bool:
+    """Один хост: ICMP echo через системный ping (без raw-сокетов)."""
+    argv = _ping_argv(ip, timeout_ms)
+    exec_timeout = max(timeout_ms / 1000.0 + 0.35, 0.5)
+    popen_kwargs: Dict[str, Any] = {
+        'stdout': asyncio.subprocess.DEVNULL,
+        'stderr': asyncio.subprocess.DEVNULL,
+    }
+    if sys.platform == 'win32':
+        popen_kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+
+    try:
+        proc = await asyncio.create_subprocess_exec(*argv, **popen_kwargs)
+    except Exception as exc:
+        logger.debug('ping spawn failed for %s: %s', ip, exc)
+        return False
+
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=exec_timeout)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        try:
+            await proc.wait()
+        except Exception:
+            pass
+        return False
+    return proc.returncode == 0
+
+
+async def _ping_sweep(
+    host_ips: List[str],
+    timeout_ms: int,
+    concurrency: int,
+) -> Set[str]:
+    """Параллельный ICMP по списку адресов."""
+    sem = asyncio.Semaphore(concurrency)
+
+    async def probe(addr: str) -> Optional[str]:
+        async with sem:
+            return addr if await _icmp_reachable(addr, timeout_ms) else None
+
+    results = await asyncio.gather(*[probe(ip) for ip in host_ips])
+    return {ip for ip in results if ip}
+
+
 # Well-known MAC OUI prefixes for manufacturer guessing when SNMP unavailable
 _MAC_OUI_VENDORS: List[tuple[str, str]] = [
     ('b0:95:75', 'TP-Link'), ('50:c7:bf', 'TP-Link'), ('ec:41:18', 'TP-Link'),
@@ -321,7 +388,7 @@ class NetworkDiscoveryService:
         self, engine, ip: str, mac: str, port: int,
         communities: List[str], semaphore: asyncio.Semaphore,
     ) -> DiscoveredDevice:
-        """For a known-alive host (from ARP), try SNMP + DNS."""
+        """Для живого хоста: SNMP + обратный DNS."""
         async with semaphore:
             snmp_info = await self._snmp_probe(engine, ip, port, communities)
             hostname = await _try_resolve_hostname(ip)
@@ -366,6 +433,7 @@ class NetworkDiscoveryService:
         subnet: str,
         communities: Optional[List[str]] = None,
         port: int = 161,
+        ping_timeout_ms: int = 900,
     ) -> Dict[str, Any]:
         if communities is None:
             communities = ['public']
@@ -375,33 +443,55 @@ class NetworkDiscoveryService:
         except ValueError as exc:
             raise ValueError(f"Invalid subnet: {exc}")
 
+        if network.version != 4:
+            raise ValueError('Only IPv4 subnets are supported for discovery')
+
+        host_ips = [str(h) for h in network.hosts()]
+        if len(host_ips) > _MAX_SUBNET_HOSTS:
+            raise ValueError(
+                f'Subnet too large: at most {_MAX_SUBNET_HOSTS} addresses per scan',
+            )
+
         start_time = time.time()
+        loop = asyncio.get_running_loop()
+        total_scanned = len(host_ips)
 
-        # 1) ARP table — instant list of all live hosts on the local network
-        arp_hosts = await asyncio.get_event_loop().run_in_executor(
-            None, _parse_arp_table, subnet,
-        )
-
-        # Also include the local machine (it won't be in its own ARP table)
         local_ip, local_mac = _get_local_address(subnet)
-        if local_ip and local_ip not in arp_hosts:
-            arp_hosts[local_ip] = local_mac
+        arp_before = await loop.run_in_executor(None, _parse_arp_table, subnet)
 
-        if not arp_hosts:
+        alive = await _ping_sweep(host_ips, ping_timeout_ms, self.concurrency)
+
+        arp_after = await loop.run_in_executor(None, _parse_arp_table, subnet)
+        mac_by_ip: Dict[str, str] = {**arp_before, **arp_after}
+        if local_ip and local_mac:
+            mac_by_ip[local_ip] = local_mac
+
+        targets: Set[str] = set(alive)
+        targets.update(mac_by_ip.keys())
+        if local_ip:
+            targets.add(local_ip)
+
+        if not targets:
             return {
                 'discovered': [],
-                'total_scanned': len(list(network.hosts())),
+                'total_scanned': total_scanned,
                 'total_found': 0,
                 'scan_time': round(time.time() - start_time, 2),
             }
 
-        # 2) For each ARP host, try SNMP + reverse DNS in parallel
         engine = SnmpEngine() if _SNMP_AVAILABLE else None
         semaphore = asyncio.Semaphore(self.concurrency)
 
         tasks = [
-            self._enrich_host(engine, ip, mac, port, communities, semaphore)
-            for ip, mac in arp_hosts.items()
+            self._enrich_host(
+                engine,
+                ip,
+                mac_by_ip.get(ip, '') if ip != local_ip else (local_mac or mac_by_ip.get(ip, '')),
+                port,
+                communities,
+                semaphore,
+            )
+            for ip in sorted(targets, key=lambda x: tuple(int(p) for p in x.split('.')))
         ]
         results = await asyncio.gather(*tasks)
 
@@ -411,7 +501,7 @@ class NetworkDiscoveryService:
 
         return {
             'discovered': discovered,
-            'total_scanned': len(list(network.hosts())),
+            'total_scanned': total_scanned,
             'total_found': len(discovered),
             'scan_time': scan_time,
         }

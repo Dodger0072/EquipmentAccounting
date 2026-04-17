@@ -1049,10 +1049,16 @@ async def discover_network_devices(body: dict):
     communities = body.get("communities", ["public"])
     timeout = body.get("timeout", 1.0)
     port = body.get("port", 161)
+    ping_timeout_ms = int(body.get("ping_timeout_ms", 900))
 
     svc = NetworkDiscoveryService(timeout=float(timeout), retries=0, concurrency=50)
     try:
-        result = await svc.discover(subnet, communities=communities, port=int(port))
+        result = await svc.discover(
+            subnet,
+            communities=communities,
+            port=int(port),
+            ping_timeout_ms=ping_timeout_ms,
+        )
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
