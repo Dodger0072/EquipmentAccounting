@@ -99,12 +99,12 @@ const Wrapper = styled('div', {
 const ToggleButton = styled('button', {
   display: 'flex',
   alignItems: 'center',
-  gap: '6px',
-  padding: '8px 12px',
+  gap: '8px',
+  padding: '10px 14px',
   backgroundColor: '#f8fafc',
   border: '1px solid #e2e8f0',
   borderRadius: '8px',
-  fontSize: '13px',
+  fontSize: '15px',
   fontWeight: '500',
   color: '#475569',
   cursor: 'pointer',
@@ -117,13 +117,13 @@ const ToggleButton = styled('button', {
   },
 
   '& svg': {
-    width: '16px',
-    height: '16px',
+    width: '18px',
+    height: '18px',
   },
 });
 
 const Arrow = styled('span', {
-  fontSize: '12px',
+  fontSize: '14px',
   transition: 'transform 0.2s ease',
 });
 
@@ -142,7 +142,7 @@ const Dropdown = styled('div', {
 });
 
 const DropdownHeader = styled('div', {
-  fontSize: '13px',
+  fontSize: '15px',
   fontWeight: '600',
   color: '#374151',
   padding: '0 16px 10px',
@@ -159,7 +159,7 @@ const ColumnItem = styled('div', {
   display: 'flex',
   alignItems: 'center',
   gap: '10px',
-  padding: '8px 16px',
+  padding: '10px 16px',
   cursor: 'pointer',
   transition: 'background-color 0.15s ease',
 
@@ -194,7 +194,7 @@ const Checkbox = styled('div', {
 });
 
 const ColumnLabel = styled('span', {
-  fontSize: '14px',
+  fontSize: '15px',
   color: '#374151',
   userSelect: 'none',
 });
@@ -208,11 +208,11 @@ const DropdownActions = styled('div', {
 });
 
 const ActionButton = styled('button', {
-  padding: '6px 12px',
+  padding: '8px 12px',
   backgroundColor: 'transparent',
   border: '1px solid #d1d5db',
   borderRadius: '6px',
-  fontSize: '13px',
+  fontSize: '14px',
   color: '#6b7280',
   cursor: 'pointer',
   transition: 'all 0.2s ease',

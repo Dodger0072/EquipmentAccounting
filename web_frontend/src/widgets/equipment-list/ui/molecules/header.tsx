@@ -21,12 +21,12 @@ export const Header: React.FC<HeaderProps> = ({ visibleColumns }) => {
 
 const HeaderContainer = styled('div', {
     display: 'grid',
-    padding: '14px 12px',
+  padding: '16px 12px',
     borderBottom: '1px solid rgba(107, 114, 128, 0.19)',
     color: '#6b7280',
-    minHeight: '48px',
+  minHeight: '54px',
     alignItems: 'center',
     gap: '14px',
-    fontSize: '14px',
+  fontSize: '16px',
     minWidth: 'fit-content',
 });

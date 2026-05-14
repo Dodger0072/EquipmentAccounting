@@ -28,6 +28,14 @@ export const getCurLocationText = (path: string) => {
       return 'Администрирование'
     case '/admin/classrooms':
       return 'Администрирование'
+    case '/admin/users':
+      return 'Администрирование'
+    case '/tickets':
+      return 'Обращения'
+    case '/tickets/new':
+      return 'Создать обращение'
+    case '/my-tickets':
+      return 'Мои обращения'
     default:
       return 'Оборудование';
   }

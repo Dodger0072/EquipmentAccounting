@@ -1,5 +1,4 @@
 import { IconHamburger } from '@consta/icons/IconHamburger';
-import { Text } from '@consta/uikit/Text';
 import { styled } from '@stitches/react';
 import { useUnit } from 'effector-react';
 
@@ -10,7 +9,6 @@ export const Header = () => {
 
   return (
     <StyledHeader>
-      <Text size='xl'>Admin.</Text>
       <StyledIcon onClick={triggerSidebarEv} />
     </StyledHeader>
   );
@@ -20,8 +18,8 @@ const StyledHeader = styled('div', {
   padding: '16px',
   paddingInline: '32px',
   display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'end',
+  justifyContent: 'flex-end',
+  alignItems: 'center',
   marginBottom: '8px',
 });
 

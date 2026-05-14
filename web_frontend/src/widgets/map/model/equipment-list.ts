@@ -1,7 +1,7 @@
 
 import { createEvent, createStore, createEffect } from 'effector';
 import { Equipment } from '@/shared/types/equipment';
-import axios from 'axios';
+import { apiClient } from '@/shared/auth';
 
 
 export const addEquipment = createEvent<Partial<Equipment>>();
@@ -10,7 +10,7 @@ export const refetchItems = createEvent<void>();
 
 
 export const fetchItemsFx = createEffect(async (): Promise<Equipment[]> => {
-  const response = await axios.get<Equipment[]>('http://localhost:8000/search');
+  const response = await apiClient.get<Equipment[]>('/search');
   return response.data;
 });
 

@@ -221,10 +221,7 @@ export const NetworkDiscoveryPopup: React.FC<NetworkDiscoveryPopupProps> = ({ on
                     <ScanningOverlay>
                         <BigSpinner />
                         <ScanningText>Идёт сканирование подсети {subnet}...</ScanningText>
-                        <ScanningHint>
-                            ICMP по всей подсети с этой машины (где запущен Backend), затем SNMP. На Wi‑Fi часть
-                            хостов может быть скрыта изоляцией клиентов в роутере.
-                        </ScanningHint>
+                        <ScanningHint>Проверка адресов и опрос SNMP. Подождите.</ScanningHint>
                         <ProgressBar><ProgressFill /></ProgressBar>
                     </ScanningOverlay>
                 )}

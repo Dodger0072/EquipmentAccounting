@@ -15,3 +15,5 @@ export * from './about/contacts'
 export * from './admin/categories'
 export * from './admin/manufacturers'
 export * from './admin/classrooms'
+
+export * from './login'

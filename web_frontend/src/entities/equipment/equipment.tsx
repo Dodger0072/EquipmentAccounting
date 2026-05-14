@@ -3,6 +3,8 @@ import { Text } from '@consta/uikit/Text';
 import { styled } from '@stitches/react';
 import { getType } from '@/shared/lib/get-type';
 import { ColumnKey, getGridTemplate } from '@/shared/config';
+import { useUnit } from 'effector-react';
+import { $role } from '@/shared/auth';
 
 type EquipmentProps = {
     equipment: EquipmentType;
@@ -27,6 +29,7 @@ const getSNMPStatusText = (status?: string) => {
 };
 
 export const Equipment = ({ equipment, displayNumber, onDelete, onEdit, visibleColumns }: EquipmentProps) => {
+    const role = useUnit($role);
     const type = getType(equipment.softwareEndDate || '');
     const hasSNMP = equipment.snmp_config?.enabled === true;
     let snmpStatus: 'up' | 'down' | 'unknown' | 'disabled' | 'error' | undefined = undefined;
@@ -50,14 +53,16 @@ export const Equipment = ({ equipment, displayNumber, onDelete, onEdit, visibleC
 
     const columnRenderers: Record<ColumnKey, () => React.ReactNode> = {
         actions: () => (
-            <ActionButtons key="actions">
-                <IconButton onClick={onEdit} title="Редактировать">
-                    <EditIcon />
-                </IconButton>
-                <IconButton onClick={onDelete} title="Удалить">
-                    <DeleteIcon />
-                </IconButton>
-            </ActionButtons>
+            role !== 'student' ? (
+                <ActionButtons key="actions">
+                    <IconButton onClick={onEdit} title="Редактировать">
+                        <EditIcon />
+                    </IconButton>
+                    <IconButton onClick={onDelete} title="Удалить">
+                        <DeleteIcon />
+                    </IconButton>
+                </ActionButtons>
+            ) : <span key="actions" />
         ),
         number: () => <Text key="number">{displayNumber}</Text>,
         name: () => (
@@ -106,12 +111,12 @@ const DeleteIcon = () => (
 
 const EquipmentContainer = styled('div', {
     display: 'grid',
-    padding: '12px 12px',
+    padding: '14px 12px',
     borderBottom: '1px solid rgba(107, 114, 128, 0.19)',
     alignItems: 'center',
-    minHeight: '48px',
+    minHeight: '54px',
     gap: '14px',
-    fontSize: '14px',
+    fontSize: '16px',
     minWidth: 'fit-content',
     variants: {
         type: {
@@ -179,7 +184,7 @@ const IconButton = styled('button', {
     backgroundColor: 'transparent',
     border: 'none',
     cursor: 'pointer',
-    padding: '4px',
+    padding: '6px',
     borderRadius: '4px',
     display: 'flex',
     alignItems: 'center',
@@ -195,7 +200,7 @@ const IconButton = styled('button', {
         transform: 'scale(0.95)',
     },
     '& svg': {
-        width: '16px',
-        height: '16px',
+        width: '18px',
+        height: '18px',
     },
 });

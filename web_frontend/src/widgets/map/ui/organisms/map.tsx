@@ -3,7 +3,7 @@ import { Text } from '@consta/uikit/Text';
 import { styled } from '@stitches/react';
 import { useUnit } from 'effector-react';
 import { useEffect, useState, useRef } from 'react';
-import axios from 'axios';
+import { apiClient } from '@/shared/auth';
 
 import { $place, $activeCategory, $activeClassroom } from '../../model';
 import { $isSidebarOpen } from '@/shared/ui/organisms/aside/model';
@@ -35,7 +35,7 @@ export const Map = () => {
       setError(null);
 
       try {
-        const response = await axios.get<{ devices: Equipment[] }>('http://localhost:8000/search');
+        const response = await apiClient.get<{ devices: Equipment[] }>('/search');
         const allDevices = response.data.devices;
 
         // Фильтруем под текущий этаж, категорию и аудиторию

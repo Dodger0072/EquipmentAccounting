@@ -6,6 +6,7 @@ import { FileInteraction, ColumnSettings } from '../molecules';
 import { fetchCategoriesFx, $equipmentCategories } from '../../model';
 import { getClassrooms, Classroom, getPlaces, Place } from '@/app/api';
 import { ColumnKey } from '@/shared/config';
+import { $role } from '@/shared/auth';
 
 interface FilterProps {
   onSearch: (searchTerm: string) => void;
@@ -41,6 +42,7 @@ export const Filter: React.FC<FilterProps> = ({
   const [allClassrooms, setAllClassrooms] = useState<Classroom[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
   const categories = useUnit($equipmentCategories);
+  const role = useUnit($role);
 
   useEffect(() => {
     fetchCategoriesFx();
@@ -195,19 +197,23 @@ export const Filter: React.FC<FilterProps> = ({
         )}
       </FilterSection>
 
-      <ColumnSettings visibleColumns={visibleColumns} onChange={onColumnsChange} />
+      {role !== 'student' && <ColumnSettings visibleColumns={visibleColumns} onChange={onColumnsChange} />}
 
-      <FileInteraction onQRPrint={onQRPrint} />
+      {role !== 'student' && <FileInteraction onQRPrint={onQRPrint} />}
 
-      <AddEquipmentButton onClick={onAddEquipment}>
-        <AddIcon />
-        Добавить оборудование
-      </AddEquipmentButton>
+      {role !== 'student' && (
+        <AddEquipmentButton onClick={onAddEquipment}>
+          <AddIcon />
+          Добавить оборудование
+        </AddEquipmentButton>
+      )}
 
-      <DiscoverButton onClick={onDiscoverDevices}>
-        <DiscoverIcon />
-        Поиск устройств
-      </DiscoverButton>
+      {role === 'admin' && (
+        <DiscoverButton onClick={onDiscoverDevices}>
+          <DiscoverIcon />
+          Поиск устройств
+        </DiscoverButton>
+      )}
     </Container>
   );
 };
@@ -216,7 +222,7 @@ const Container = styled('div', {
   marginBottom: '16px',
   display: 'flex',
   alignItems: 'center',
-  gap: '10px',
+  gap: '12px',
   flexWrap: 'wrap',
 });
 
@@ -233,12 +239,12 @@ const FilterSection = styled('div', {
 const FilterButton = styled('button', {
   display: 'flex',
   alignItems: 'center',
-  gap: '6px',
-  padding: '8px 12px',
+  gap: '8px',
+  padding: '10px 14px',
   backgroundColor: '#f8fafc',
   border: '1px solid #e2e8f0',
   borderRadius: '8px',
-  fontSize: '13px',
+  fontSize: '15px',
   fontWeight: '500',
   color: '#475569',
   cursor: 'pointer',
@@ -251,8 +257,8 @@ const FilterButton = styled('button', {
   },
   
   '& svg': {
-    width: '16px',
-    height: '16px',
+    width: '18px',
+    height: '18px',
   },
 });
 
@@ -264,7 +270,7 @@ const ActiveIndicator = styled('div', {
 });
 
 const Arrow = styled('span', {
-  fontSize: '12px',
+  fontSize: '14px',
   transition: 'transform 0.2s ease',
   transform: (props: { isOpen: boolean }) => props.isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
 });
@@ -278,7 +284,7 @@ const FilterDropdown = styled('div', {
   border: '1px solid #e2e8f0',
   borderRadius: '8px',
   boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-  padding: '16px',
+  padding: '18px',
   marginTop: '4px',
   zIndex: 1000,
   minWidth: '300px',
@@ -294,7 +300,7 @@ const FilterGroup = styled('div', {
 
 const FilterLabel = styled('label', {
   display: 'block',
-  fontSize: '14px',
+  fontSize: '16px',
   fontWeight: '500',
   color: '#374151',
   marginBottom: '6px',
@@ -302,10 +308,10 @@ const FilterLabel = styled('label', {
 
 const FilterSelect = styled('select', {
   width: '100%',
-  padding: '8px 12px',
+  padding: '10px 12px',
   border: '1px solid #d1d5db',
   borderRadius: '6px',
-  fontSize: '14px',
+  fontSize: '15px',
   backgroundColor: 'white',
   cursor: 'pointer',
   
@@ -323,11 +329,11 @@ const FilterActions = styled('div', {
 });
 
 const ClearButton = styled('button', {
-  padding: '6px 12px',
+  padding: '8px 14px',
   backgroundColor: 'transparent',
   border: '1px solid #d1d5db',
   borderRadius: '6px',
-  fontSize: '14px',
+  fontSize: '15px',
   color: '#6b7280',
   cursor: 'pointer',
   transition: 'all 0.2s ease',
@@ -341,12 +347,12 @@ const ClearButton = styled('button', {
 const AddEquipmentButton = styled('button', {
   display: 'flex',
   alignItems: 'center',
-  gap: '6px',
-  padding: '8px 16px',
+  gap: '8px',
+  padding: '10px 18px',
   backgroundColor: '#3b82f6',
   border: 'none',
   borderRadius: '6px',
-  fontSize: '13px',
+  fontSize: '15px',
   fontWeight: '500',
   color: 'white',
   cursor: 'pointer',
@@ -362,8 +368,8 @@ const AddEquipmentButton = styled('button', {
   },
   
   '& svg': {
-    width: '16px',
-    height: '16px',
+    width: '18px',
+    height: '18px',
   },
 });
 
@@ -377,12 +383,12 @@ const AddIcon = () => (
 const DiscoverButton = styled('button', {
   display: 'flex',
   alignItems: 'center',
-  gap: '6px',
-  padding: '8px 16px',
+  gap: '8px',
+  padding: '10px 18px',
   backgroundColor: '#8b5cf6',
   border: 'none',
   borderRadius: '6px',
-  fontSize: '13px',
+  fontSize: '15px',
   fontWeight: '500',
   color: 'white',
   cursor: 'pointer',
@@ -398,8 +404,8 @@ const DiscoverButton = styled('button', {
   },
 
   '& svg': {
-    width: '16px',
-    height: '16px',
+    width: '18px',
+    height: '18px',
   },
 });
 

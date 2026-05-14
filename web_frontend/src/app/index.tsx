@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 
 import './global.css';
 import { Provider as RouterProvider } from './router';
+import { initAuth } from '@/shared/auth';
+
+initAuth();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <Theme preset={presetGpnDefault}>

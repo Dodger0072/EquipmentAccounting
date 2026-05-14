@@ -16,13 +16,29 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
+import ipaddress
 from models.device import device
 from models.place import place
 from models.category import category
 from models.manufacturer import manufacturer
 from models.classroom import classroom
+from models.web_user import WebUser
+from models.ticket import Ticket
 from models.db_session import create_session, Base
-from schemas import EquipmentCreate, EquipmentUpdate, CategoryCreate, CategoryUpdate, CategoryResponse, ManufacturerCreate, ManufacturerUpdate, ManufacturerResponse, ClassroomCreate, ClassroomUpdate, ClassroomResponse
+from schemas import (
+    EquipmentCreate, EquipmentUpdate,
+    CategoryCreate, CategoryUpdate, CategoryResponse,
+    ManufacturerCreate, ManufacturerUpdate, ManufacturerResponse,
+    ClassroomCreate, ClassroomUpdate, ClassroomResponse,
+    LoginRequest, TokenResponse, RefreshRequest,
+    UserCreate, UserUpdate, UserResponse,
+    TicketCreate, TicketStatusUpdate, TicketResponse,
+)
+from auth import (
+    hash_password, verify_password,
+    create_access_token, create_refresh_token, decode_token,
+    get_current_user, require_role,
+)
 from datetime import datetime
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,6 +68,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _validate_snmp_target_ip(ip_raw: str) -> str:
+    """Validate SNMP target IP and reject subnet/broadcast addresses."""
+    ip_text = (ip_raw or "").strip()
+    try:
+        ip_obj = ipaddress.ip_address(ip_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid SNMP IP address: {ip_text}") from exc
+
+    if isinstance(ip_obj, ipaddress.IPv4Address):
+        last_octet = int(ip_text.split(".")[-1])
+        if last_octet in (0, 255):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid SNMP IP address (network/broadcast): {ip_text}",
+            )
+    return ip_text
+
 # Инициализация настроек
 settings = Settings()
 
@@ -68,7 +102,6 @@ async def lifespan(app: FastAPI):
     async with create_session() as db:
         existing_places = await place.get_all_places(db)
         if not existing_places:
-            # Создаем дефолтные места
             default_places = [
                 place(name="Этаж 2"),
                 place(name="Этаж 3"),
@@ -78,7 +111,20 @@ async def lifespan(app: FastAPI):
                 db.add(p)
             await db.commit()
             print("Созданы дефолтные места (карты)")
-    
+
+    # Создаем администратора по умолчанию, если его нет
+    async with create_session() as db:
+        admin_user = await WebUser.get_by_username(db, "admin")
+        if not admin_user:
+            await WebUser.create(
+                db,
+                username="admin",
+                hashed_password=hash_password("admin"),
+                full_name="Администратор",
+                role="admin",
+            )
+            print("WARNING: Создан администратор по умолчанию (admin/admin). Смените пароль!")
+
     yield
     # Shutdown
     pass
@@ -107,14 +153,14 @@ async def options_handler(request: Request, path: str):
     )
 
 @app.get("/places", tags=["Карты"])
-async def get_places():
+async def get_places(current_user: WebUser = Depends(get_current_user)):
     """Получить все карты (места)"""
     async with create_session() as db:
         places = await place.get_all_places(db)
         return [{"id": p.id, "name": p.name} for p in places]
 
 @app.post("/add_place", tags=["оборудование"])
-async def add_place(place_data: dict):
+async def add_place(place_data: dict, current_user: WebUser = Depends(require_role("admin"))):
     async with create_session() as db:
         existing = await db.execute(select(place).where(place.name == place_data["name"]))
         existing = existing.scalar_one_or_none()
@@ -129,7 +175,7 @@ async def add_place(place_data: dict):
         return {"message": "Place added successfully", "id": new_place.id}
 
 @app.post("/add_device", tags=["оборудование"])
-async def add_device(equipment: EquipmentCreate):
+async def add_device(equipment: EquipmentCreate, current_user: WebUser = Depends(require_role("admin", "operator"))):
     async with create_session() as db:
         existing = await db.execute(select(device).where(device.name == equipment.name))
         existing = existing.scalar_one_or_none()
@@ -190,7 +236,7 @@ async def add_device(equipment: EquipmentCreate):
         }}
 
 @app.get("/equipment/{device_id}", tags=["оборудование"])
-async def get_device_by_id(device_id: int):
+async def get_device_by_id(device_id: int, current_user: WebUser = Depends(get_current_user)):
     """Получить информацию об оборудовании по ID"""
     async with create_session() as db:
         # Сначала проверяем существование устройства
@@ -247,7 +293,7 @@ async def get_device_by_id(device_id: int):
         return device_dict
 
 @app.get("/equipment/{device_id}/qr", tags=["оборудование"])
-async def get_device_qr_code(device_id: int):
+async def get_device_qr_code(device_id: int, current_user: WebUser = Depends(get_current_user)):
     """Генерирует QR код для оборудования"""
     async with create_session() as db:
         result = await db.execute(select(device).where(device.id == device_id))
@@ -287,7 +333,7 @@ async def get_device_qr_code(device_id: int):
         )
 
 @app.get("/search", tags=["оборудование"])
-async def search_devices():
+async def search_devices(current_user: WebUser = Depends(get_current_user)):
     async with create_session() as db:
         # Делаем JOIN с таблицей категорий, чтобы получить иконку
         result = await db.execute(
@@ -350,7 +396,7 @@ async def _delete_device_dependents(db: AsyncSession, device_id: int) -> None:
 
 
 @app.delete("/delete_device/{device_id}", tags=["оборудование"])
-async def delete_device(device_id: int):
+async def delete_device(device_id: int, current_user: WebUser = Depends(require_role("admin", "operator"))):
     async with create_session() as db:
         result = await db.execute(select(device).where(device.id == device_id))
         db_device = result.scalar_one_or_none()
@@ -365,7 +411,7 @@ async def delete_device(device_id: int):
         return {"message": f"Device {device_id} deleted successfully"}
 
 @app.delete("/delete_devices_by_category/{category_id}", tags=["оборудование"])
-async def delete_devices_by_category(category_id: int):
+async def delete_devices_by_category(category_id: int, current_user: WebUser = Depends(require_role("admin"))):
     """Удалить все устройства категории"""
     async with create_session() as db:
         # Получаем категорию
@@ -393,7 +439,7 @@ async def delete_devices_by_category(category_id: int):
         }
 
 @app.put("/update_device/{device_id}", tags=["оборудование"])
-async def update_device(device_id: int, equipment: EquipmentUpdate):
+async def update_device(device_id: int, equipment: EquipmentUpdate, current_user: WebUser = Depends(require_role("admin", "operator"))):
     async with create_session() as db:
         result = await db.execute(select(device).where(device.id == device_id))
         db_device = result.scalar_one_or_none()
@@ -464,14 +510,14 @@ async def update_device(device_id: int, equipment: EquipmentUpdate):
 
 # API endpoints для категорий
 @app.get("/categories", tags=["Категории"])
-async def get_categories():
+async def get_categories(current_user: WebUser = Depends(get_current_user)):
     """Получить все категории"""
     async with create_session() as db:
         categories = await category.get_all_categories(db)
         return [cat.to_dict() for cat in categories]
 
 @app.post("/categories", tags=["Категории"])
-async def create_category(category_data: CategoryCreate):
+async def create_category(category_data: CategoryCreate, current_user: WebUser = Depends(require_role("admin"))):
     """Создать новую категорию"""
     async with create_session() as db:
         # Проверяем, существует ли категория с таким именем
@@ -483,7 +529,7 @@ async def create_category(category_data: CategoryCreate):
         return new_category.to_dict()
 
 @app.get("/categories/{category_id}", tags=["Категории"])
-async def get_category(category_id: int):
+async def get_category(category_id: int, current_user: WebUser = Depends(get_current_user)):
     """Получить категорию по ID"""
     async with create_session() as db:
         cat = await category.get_category_by_id(db, category_id)
@@ -492,7 +538,7 @@ async def get_category(category_id: int):
         return cat.to_dict()
 
 @app.put("/categories/{category_id}", tags=["Категории"])
-async def update_category(category_id: int, category_data: CategoryUpdate):
+async def update_category(category_id: int, category_data: CategoryUpdate, current_user: WebUser = Depends(require_role("admin"))):
     """Обновить категорию"""
     async with create_session() as db:
         # Проверяем, существует ли категория
@@ -515,7 +561,7 @@ async def update_category(category_id: int, category_data: CategoryUpdate):
         return updated_category.to_dict()
 
 @app.delete("/categories/{category_id}", tags=["Категории"])
-async def delete_category(category_id: int):
+async def delete_category(category_id: int, current_user: WebUser = Depends(require_role("admin"))):
     """Удалить категорию"""
     async with create_session() as db:
         # Проверяем, существует ли категория
@@ -548,14 +594,14 @@ async def delete_category(category_id: int):
 
 # API endpoints для производителей
 @app.get("/manufacturers", tags=["Производители"])
-async def get_manufacturers():
+async def get_manufacturers(current_user: WebUser = Depends(get_current_user)):
     """Получить всех производителей"""
     async with create_session() as db:
         manufacturers = await manufacturer.get_all_manufacturers(db)
         return [man.to_dict() for man in manufacturers]
 
 @app.get("/manufacturers/category/{category_id}", tags=["Производители"])
-async def get_manufacturers_by_category(category_id: int):
+async def get_manufacturers_by_category(category_id: int, current_user: WebUser = Depends(get_current_user)):
     """Получить производителей по категории"""
     async with create_session() as db:
         # Проверяем, существует ли категория
@@ -567,7 +613,7 @@ async def get_manufacturers_by_category(category_id: int):
         return [man.to_dict() for man in manufacturers]
 
 @app.post("/manufacturers", tags=["Производители"])
-async def create_manufacturer(manufacturer_data: ManufacturerCreate):
+async def create_manufacturer(manufacturer_data: ManufacturerCreate, current_user: WebUser = Depends(require_role("admin"))):
     """Создать нового производителя"""
     async with create_session() as db:
         # Проверяем, существует ли категория
@@ -581,7 +627,7 @@ async def create_manufacturer(manufacturer_data: ManufacturerCreate):
         return new_manufacturer.to_dict()
 
 @app.get("/manufacturers/{manufacturer_id}", tags=["Производители"])
-async def get_manufacturer(manufacturer_id: int):
+async def get_manufacturer(manufacturer_id: int, current_user: WebUser = Depends(get_current_user)):
     """Получить производителя по ID"""
     async with create_session() as db:
         man = await manufacturer.get_manufacturer_by_id(db, manufacturer_id)
@@ -590,7 +636,7 @@ async def get_manufacturer(manufacturer_id: int):
         return man.to_dict()
 
 @app.put("/manufacturers/{manufacturer_id}", tags=["Производители"])
-async def update_manufacturer(manufacturer_id: int, manufacturer_data: ManufacturerUpdate):
+async def update_manufacturer(manufacturer_id: int, manufacturer_data: ManufacturerUpdate, current_user: WebUser = Depends(require_role("admin"))):
     """Обновить производителя"""
     async with create_session() as db:
         # Проверяем, существует ли производитель
@@ -615,7 +661,7 @@ async def update_manufacturer(manufacturer_id: int, manufacturer_data: Manufactu
         return updated_manufacturer.to_dict()
 
 @app.delete("/manufacturers/{manufacturer_id}", tags=["Производители"])
-async def delete_manufacturer(manufacturer_id: int):
+async def delete_manufacturer(manufacturer_id: int, current_user: WebUser = Depends(require_role("admin"))):
     """Удалить производителя"""
     async with create_session() as db:
         # Проверяем, существует ли производитель
@@ -639,21 +685,21 @@ async def delete_manufacturer(manufacturer_id: int):
 
 # API endpoints для аудиторий
 @app.get("/classrooms", tags=["Аудитории"])
-async def get_classrooms():
+async def get_classrooms(current_user: WebUser = Depends(get_current_user)):
     """Получить все аудитории"""
     async with create_session() as db:
         classrooms = await classroom.get_all_classrooms(db)
         return [cls.to_dict() for cls in classrooms]
 
 @app.get("/classrooms/map/{map_id}", tags=["Аудитории"])
-async def get_classrooms_by_map(map_id: int):
+async def get_classrooms_by_map(map_id: int, current_user: WebUser = Depends(get_current_user)):
     """Получить все аудитории для конкретной карты"""
     async with create_session() as db:
         classrooms = await classroom.get_classrooms_by_map(db, map_id)
         return [cls.to_dict() for cls in classrooms]
 
 @app.get("/classrooms/find-by-point", tags=["Аудитории"])
-async def find_classroom_by_point(map_id: int, x: float, y: float):
+async def find_classroom_by_point(map_id: int, x: float, y: float, current_user: WebUser = Depends(get_current_user)):
     """Найти аудиторию по координатам точки на карте"""
     async with create_session() as db:
         found_classroom = await classroom.find_classroom_by_point(db, map_id, x, y)
@@ -662,7 +708,7 @@ async def find_classroom_by_point(map_id: int, x: float, y: float):
         return {"classroom": found_classroom.to_dict()}
 
 @app.post("/classrooms", tags=["Аудитории"])
-async def create_classroom(classroom_data: ClassroomCreate):
+async def create_classroom(classroom_data: ClassroomCreate, current_user: WebUser = Depends(require_role("admin"))):
     """Создать новую аудиторию"""
     async with create_session() as db:
         # Проверяем, существует ли карта
@@ -689,7 +735,7 @@ async def create_classroom(classroom_data: ClassroomCreate):
         return new_classroom.to_dict()
 
 @app.get("/classrooms/{classroom_id}", tags=["Аудитории"])
-async def get_classroom(classroom_id: int):
+async def get_classroom(classroom_id: int, current_user: WebUser = Depends(get_current_user)):
     """Получить аудиторию по ID"""
     async with create_session() as db:
         cls = await classroom.get_classroom_by_id(db, classroom_id)
@@ -698,7 +744,7 @@ async def get_classroom(classroom_id: int):
         return cls.to_dict()
 
 @app.put("/classrooms/{classroom_id}", tags=["Аудитории"])
-async def update_classroom(classroom_id: int, classroom_data: ClassroomUpdate):
+async def update_classroom(classroom_id: int, classroom_data: ClassroomUpdate, current_user: WebUser = Depends(require_role("admin"))):
     """Обновить аудиторию"""
     async with create_session() as db:
         existing = await classroom.get_classroom_by_id(db, classroom_id)
@@ -723,7 +769,7 @@ async def update_classroom(classroom_id: int, classroom_data: ClassroomUpdate):
         return updated_classroom.to_dict()
 
 @app.delete("/classrooms/{classroom_id}", tags=["Аудитории"])
-async def delete_classroom(classroom_id: int):
+async def delete_classroom(classroom_id: int, current_user: WebUser = Depends(require_role("admin"))):
     """Удалить аудиторию"""
     try:
         async with create_session() as db:
@@ -766,7 +812,7 @@ async def delete_classroom(classroom_id: int):
 snmp_service = SNMPService() if SNMP_AVAILABLE else None
 
 @app.get("/snmp/check/{device_id}", tags=["SNMP Monitoring"])
-async def check_device_snmp(device_id: int, db: AsyncSession = Depends(create_session)):
+async def check_device_snmp(device_id: int, db: AsyncSession = Depends(create_session), current_user: WebUser = Depends(require_role("admin"))):
     """Проверяет статус конкретного устройства через SNMP"""
     if not SNMP_AVAILABLE or not snmp_service:
         raise HTTPException(status_code=503, detail="SNMP service is not available. Install pysnmp: pip install pysnmp")
@@ -820,7 +866,7 @@ async def check_device_snmp(device_id: int, db: AsyncSession = Depends(create_se
         raise HTTPException(status_code=500, detail=f"SNMP check failed: {str(e)}")
 
 @app.get("/snmp/check-all", tags=["SNMP Monitoring"])
-async def check_all_devices_snmp(db: AsyncSession = Depends(create_session)):
+async def check_all_devices_snmp(db: AsyncSession = Depends(create_session), current_user: WebUser = Depends(require_role("admin"))):
     """Проверяет статус всех устройств с включенным SNMP мониторингом"""
     if not SNMP_AVAILABLE or not snmp_service:
         raise HTTPException(status_code=503, detail="SNMP service is not available")
@@ -873,7 +919,7 @@ async def check_all_devices_snmp(db: AsyncSession = Depends(create_session)):
         raise HTTPException(status_code=500, detail=f"Bulk SNMP check failed: {str(e)}")
 
 @app.get("/snmp/interfaces/{device_id}", tags=["SNMP Monitoring"])
-async def get_device_interfaces(device_id: int, db: AsyncSession = Depends(create_session)):
+async def get_device_interfaces(device_id: int, db: AsyncSession = Depends(create_session), current_user: WebUser = Depends(require_role("admin"))):
     """Получает информацию об интерфейсах устройства"""
     if not SNMP_AVAILABLE or not snmp_service:
         raise HTTPException(status_code=503, detail="SNMP service is not available")
@@ -912,7 +958,7 @@ async def get_device_interfaces(device_id: int, db: AsyncSession = Depends(creat
         raise HTTPException(status_code=500, detail=f"Failed to get interface status: {str(e)}")
 
 @app.post("/snmp/config", tags=["SNMP Monitoring"])
-async def create_or_update_snmp_config(snmp_config_data: dict, db: AsyncSession = Depends(create_session)):
+async def create_or_update_snmp_config(snmp_config_data: dict, db: AsyncSession = Depends(create_session), current_user: WebUser = Depends(require_role("admin"))):
     """Создает или обновляет SNMP конфигурацию устройства"""
     try:
         # Валидируем обязательные поля
@@ -922,6 +968,7 @@ async def create_or_update_snmp_config(snmp_config_data: dict, db: AsyncSession 
             raise HTTPException(status_code=400, detail="Missing required field: ip_address")
         
         device_id = snmp_config_data['device_id']
+        target_ip = _validate_snmp_target_ip(snmp_config_data['ip_address'])
         
         # Проверяем, что устройство существует
         device_obj = await device.get_device_by_id(db, device_id)
@@ -936,7 +983,7 @@ async def create_or_update_snmp_config(snmp_config_data: dict, db: AsyncSession 
         # Подготавливаем данные для конфигурации
         config_data = {
             'enabled': enabled_value,
-            'ip_address': snmp_config_data['ip_address'],
+            'ip_address': target_ip,
             'port': snmp_config_data.get('port', 161),
             'community': snmp_config_data.get('community', 'public'),
             'version': snmp_config_data.get('version', '2c'),
@@ -982,7 +1029,7 @@ async def create_or_update_snmp_config(snmp_config_data: dict, db: AsyncSession 
         raise HTTPException(status_code=500, detail=f"Failed to update SNMP config: {str(e)}")
 
 @app.get("/snmp/status", tags=["SNMP Monitoring"])
-async def get_snmp_status_summary(db: AsyncSession = Depends(create_session)):
+async def get_snmp_status_summary(db: AsyncSession = Depends(create_session), current_user: WebUser = Depends(require_role("admin"))):
     """Получает сводку по статусу SNMP мониторинга"""
     try:
         # Получаем все устройства
@@ -1017,7 +1064,7 @@ async def get_snmp_status_summary(db: AsyncSession = Depends(create_session)):
 discovery_service = NetworkDiscoveryService() if DISCOVERY_AVAILABLE else None
 
 @app.get("/snmp/discover/subnet", tags=["SNMP Discovery"])
-async def get_local_subnet():
+async def get_local_subnet(current_user: WebUser = Depends(require_role("admin"))):
     """Определяет локальную подсеть сервера для подстановки по умолчанию"""
     import socket
     import ipaddress as _ip
@@ -1034,7 +1081,7 @@ async def get_local_subnet():
         return {"subnet": "192.168.0.0/24", "local_ip": ""}
 
 @app.post("/snmp/discover", tags=["SNMP Discovery"])
-async def discover_network_devices(body: dict):
+async def discover_network_devices(body: dict, current_user: WebUser = Depends(require_role("admin"))):
     """Сканирует подсеть и возвращает найденные SNMP-устройства"""
     if not DISCOVERY_AVAILABLE or not discovery_service:
         raise HTTPException(
@@ -1069,7 +1116,7 @@ async def discover_network_devices(body: dict):
 
 
 @app.post("/snmp/discover/import", tags=["SNMP Discovery"])
-async def import_discovered_devices(body: dict, db: AsyncSession = Depends(create_session)):
+async def import_discovered_devices(body: dict, db: AsyncSession = Depends(create_session), current_user: WebUser = Depends(require_role("admin"))):
     """Импортирует выбранные устройства из результатов сканирования в БД"""
     devices_data = body.get("devices", [])
     if not devices_data:
@@ -1085,6 +1132,11 @@ async def import_discovered_devices(body: dict, db: AsyncSession = Depends(creat
 
     for dev in devices_data:
         ip = dev.get("ip", "")
+        try:
+            ip = _validate_snmp_target_ip(ip)
+        except HTTPException:
+            logger.warning(f"Skipped imported device with invalid SNMP IP: {ip}")
+            continue
         name = dev.get("name") or ip
         manufacturer_name = dev.get("manufacturer_guess", "")
 
@@ -1121,6 +1173,184 @@ async def import_discovered_devices(body: dict, db: AsyncSession = Depends(creat
             continue
 
     return {"imported": imported, "count": len(imported)}
+
+
+# ============================================================
+# Auth endpoints
+# ============================================================
+
+@app.post("/auth/login", tags=["Auth"])
+async def login(body: LoginRequest):
+    """Аутентификация по логину и паролю, возврат JWT-токенов"""
+    async with create_session() as db:
+        user = await WebUser.get_by_username(db, body.username)
+        if not user or not verify_password(body.password, user.hashed_password):
+            raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Аккаунт деактивирован")
+
+        access_token = create_access_token({"sub": str(user.id), "role": user.role})
+        refresh_token = create_refresh_token({"sub": str(user.id), "role": user.role})
+        return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@app.post("/auth/refresh", tags=["Auth"])
+async def refresh_token(body: RefreshRequest):
+    """Обновление access-токена по refresh-токену"""
+    payload = decode_token(body.refresh_token)
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Invalid token type")
+    user_id = payload.get("sub")
+    role = payload.get("role")
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    async with create_session() as db:
+        user = await WebUser.get_by_id(db, int(user_id))
+        if not user or not user.is_active:
+            raise HTTPException(status_code=401, detail="User not found or deactivated")
+        access_token = create_access_token({"sub": str(user.id), "role": user.role})
+        new_refresh = create_refresh_token({"sub": str(user.id), "role": user.role})
+        return TokenResponse(access_token=access_token, refresh_token=new_refresh)
+
+
+@app.get("/auth/me", tags=["Auth"])
+async def get_me(current_user: WebUser = Depends(get_current_user)):
+    """Получить данные текущего пользователя"""
+    return current_user.to_dict()
+
+
+# ============================================================
+# User management endpoints (admin only)
+# ============================================================
+
+@app.get("/auth/users", tags=["Users"])
+async def list_users(current_user: WebUser = Depends(require_role("admin"))):
+    """Список всех пользователей (admin)"""
+    async with create_session() as db:
+        users = await WebUser.get_all(db)
+        return [u.to_dict() for u in users]
+
+
+@app.post("/auth/users", tags=["Users"])
+async def create_user(body: UserCreate, current_user: WebUser = Depends(require_role("admin"))):
+    """Создать пользователя (admin)"""
+    if body.role not in ("admin", "operator", "student"):
+        raise HTTPException(status_code=400, detail="Роль должна быть admin, operator или student")
+    async with create_session() as db:
+        existing = await WebUser.get_by_username(db, body.username)
+        if existing:
+            raise HTTPException(status_code=400, detail="Пользователь с таким логином уже существует")
+        user = await WebUser.create(
+            db,
+            username=body.username,
+            hashed_password=hash_password(body.password),
+            full_name=body.full_name,
+            email=body.email,
+            role=body.role,
+        )
+        return user.to_dict()
+
+
+@app.put("/auth/users/{user_id}", tags=["Users"])
+async def update_user(user_id: int, body: UserUpdate, current_user: WebUser = Depends(require_role("admin"))):
+    """Обновить пользователя (admin)"""
+    async with create_session() as db:
+        user = await WebUser.get_by_id(db, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+        update_data = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+        if "password" in update_data:
+            update_data["hashed_password"] = hash_password(update_data.pop("password"))
+        if "role" in update_data and update_data["role"] not in ("admin", "operator", "student"):
+            raise HTTPException(status_code=400, detail="Роль должна быть admin, operator или student")
+        if not update_data:
+            raise HTTPException(status_code=400, detail="Нет данных для обновления")
+
+        updated = await WebUser.update_user(db, user_id, update_data)
+        return updated.to_dict()
+
+
+@app.delete("/auth/users/{user_id}", tags=["Users"])
+async def delete_user(user_id: int, current_user: WebUser = Depends(require_role("admin"))):
+    """Удалить пользователя (admin)"""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя удалить самого себя")
+    async with create_session() as db:
+        user = await WebUser.get_by_id(db, user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        await WebUser.delete_user(db, user_id)
+        return {"message": f"Пользователь {user_id} удалён"}
+
+
+# ============================================================
+# Ticket endpoints
+# ============================================================
+
+@app.get("/tickets", tags=["Tickets"])
+async def list_tickets(current_user: WebUser = Depends(require_role("admin", "operator"))):
+    """Список всех тикетов (operator, admin)"""
+    async with create_session() as db:
+        tickets = await Ticket.get_all(db)
+        return [t.to_dict() for t in tickets]
+
+
+@app.post("/tickets", tags=["Tickets"])
+async def create_ticket(body: TicketCreate, current_user: WebUser = Depends(require_role("student"))):
+    """Создать тикет о неисправности (student)"""
+    async with create_session() as db:
+        device_obj = await device.get_device_by_id(db, body.device_id)
+        if not device_obj:
+            raise HTTPException(status_code=404, detail="Устройство не найдено")
+
+        ticket = await Ticket.create(
+            db,
+            device_id=body.device_id,
+            author_id=current_user.id,
+            title=body.title,
+            description=body.description,
+        )
+        return ticket.to_dict()
+
+
+@app.get("/tickets/my", tags=["Tickets"])
+async def my_tickets(current_user: WebUser = Depends(require_role("student"))):
+    """Мои тикеты (student)"""
+    async with create_session() as db:
+        tickets = await Ticket.get_by_author(db, current_user.id)
+        return [t.to_dict() for t in tickets]
+
+
+@app.get("/tickets/{ticket_id}", tags=["Tickets"])
+async def get_ticket(ticket_id: int, current_user: WebUser = Depends(get_current_user)):
+    """Детали тикета (авторизованный пользователь)"""
+    async with create_session() as db:
+        ticket = await Ticket.get_by_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Тикет не найден")
+        if current_user.role == "student" and ticket.author_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Нет доступа к этому тикету")
+        return ticket.to_dict()
+
+
+@app.put("/tickets/{ticket_id}/status", tags=["Tickets"])
+async def update_ticket_status(
+    ticket_id: int,
+    body: TicketStatusUpdate,
+    current_user: WebUser = Depends(require_role("admin", "operator")),
+):
+    """Изменить статус тикета (operator, admin)"""
+    if body.status not in ("open", "in_progress", "closed"):
+        raise HTTPException(status_code=400, detail="Статус должен быть open, in_progress или closed")
+    async with create_session() as db:
+        ticket = await Ticket.get_by_id(db, ticket_id)
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Тикет не найден")
+        closed_at = datetime.now() if body.status == "closed" else None
+        updated = await Ticket.update_status(db, ticket_id, body.status, closed_at)
+        return updated.to_dict()
 
 
 if __name__ == "__main__":

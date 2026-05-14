@@ -22,4 +22,11 @@ export const Search: React.FC<SearchProps> = ({ value, onChange }) => {
 
 const Input = styled(TextField, {
   borderBottom: '1px solid #6b7280',
+  '& input': {
+    fontSize: '15px',
+  },
+  '& [class*="TextField-Icon"]': {
+    width: '18px',
+    height: '18px',
+  },
 });

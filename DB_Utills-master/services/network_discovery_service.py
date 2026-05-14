@@ -343,23 +343,32 @@ class NetworkDiscoveryService:
         # Меньше параллельных SNMP — стабильнее на Wi‑Fi и при строгом файрволе
         self.snmp_concurrency = max(1, snmp_concurrency)
 
-    async def _snmp_get(
+    def _snmp_bind_attempts(self, local_bind: Optional[str]) -> List[Optional[str]]:
+        """Сначала привязка к интерфейсу подсети, затем без привязки (ОС сама выберет исходящий адрес)."""
+        attempts: List[Optional[str]] = []
+        if local_bind:
+            attempts.append(local_bind)
+        attempts.append(None)
+        return attempts
+
+    async def _snmp_get_one(
         self,
         engine,
         ip: str,
         port: int,
         community: str,
         oid: str,
-        local_bind: Optional[str] = None,
+        bind: Optional[str],
     ) -> Optional[str]:
+        """Один SNMP GET; bind=None — не вызывать set_local_address."""
         if not _SNMP_AVAILABLE:
             return None
         try:
             transport = await UdpTransportTarget.create(
                 (ip, port), timeout=self.timeout, retries=self.retries,
             )
-            if local_bind:
-                transport.set_local_address((local_bind, 0))
+            if bind:
+                transport.set_local_address((bind, 0))
             error_indication, error_status, _error_index, var_binds = await get_cmd(
                 engine,
                 CommunityData(community, mpModel=1),
@@ -367,14 +376,25 @@ class NetworkDiscoveryService:
                 ContextData(),
                 ObjectType(ObjectIdentity(oid)),
             )
-            if error_indication or error_status:
+            if error_indication:
+                logger.debug(
+                    'SNMP indication %s oid=%s bind=%r: %s',
+                    ip, oid, bind, error_indication,
+                )
+                return None
+            if error_status:
+                logger.debug(
+                    'SNMP status %s oid=%s bind=%r: %s',
+                    ip, oid, bind, error_status,
+                )
                 return None
             for var_bind in var_binds:
                 val = str(var_bind[1])
                 if val and val != 'No Such Object currently exists at this OID':
                     return val
             return None
-        except Exception:
+        except Exception as exc:
+            logger.debug('SNMP GET %s oid=%s bind=%r failed: %s', ip, oid, bind, exc)
             return None
 
     async def _snmp_probe(
@@ -389,17 +409,25 @@ class NetworkDiscoveryService:
         if not _SNMP_AVAILABLE:
             return None
 
+        bind_attempts = self._snmp_bind_attempts(local_bind)
+
         for community in communities:
-            sys_descr = await self._snmp_get(
-                engine, ip, port, community, SYSTEM_OIDS['sysDescr'], local_bind,
-            )
+            sys_descr: Optional[str] = None
+            used_bind: Optional[str] = None
+            for eff_bind in bind_attempts:
+                sys_descr = await self._snmp_get_one(
+                    engine, ip, port, community, SYSTEM_OIDS['sysDescr'], eff_bind,
+                )
+                if sys_descr is not None:
+                    used_bind = eff_bind
+                    break
             if sys_descr is None:
                 continue
 
             oid_keys = ['sysName', 'sysUpTime', 'sysLocation', 'sysContact']
             tasks = [
-                self._snmp_get(
-                    engine, ip, port, community, SYSTEM_OIDS[k], local_bind,
+                self._snmp_get_one(
+                    engine, ip, port, community, SYSTEM_OIDS[k], used_bind,
                 )
                 for k in oid_keys
             ]
@@ -543,6 +571,18 @@ class NetworkDiscoveryService:
             for ip in sorted_ips
         ]
         results = await asyncio.gather(*tasks)
+
+        if (
+            _SNMP_AVAILABLE
+            and results
+            and not any(d.has_snmp for d in results)
+        ):
+            logger.warning(
+                'SNMP: ни один из %d хостов не ответил. Частые причины: брандмауэр на машине '
+                'с Backend (исходящий UDP 161 для python.exe), неверный community, на цели '
+                'выключен SNMP или разрешён только с других адресов.',
+                len(results),
+            )
 
         discovered = [asdict(d) for d in results]
         discovered.sort(key=lambda d: tuple(int(p) for p in d['ip'].split('.')))

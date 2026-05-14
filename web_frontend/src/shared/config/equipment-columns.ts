@@ -20,7 +20,7 @@ export type ColumnConfig = {
 };
 
 export const ALL_COLUMNS: ColumnConfig[] = [
-  { key: 'actions', label: 'Действия', width: '64px', defaultVisible: true, alwaysVisible: true },
+  { key: 'actions', label: 'Действия', width: '90px', defaultVisible: true, alwaysVisible: true },
   { key: 'number', label: '№', width: '40px', defaultVisible: true, alwaysVisible: true },
   { key: 'name', label: 'Название', width: 'minmax(120px, 200px)', defaultVisible: true },
   { key: 'category', label: 'Категория', width: 'minmax(100px, 140px)', defaultVisible: false },

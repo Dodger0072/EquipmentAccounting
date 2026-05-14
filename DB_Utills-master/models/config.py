@@ -13,7 +13,11 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
     DB_NAME: str
-    FRONTEND_URL: str = "http://localhost:5173"  # URL фронтенда для QR кодов (можно задать через переменную окружения)
+    FRONTEND_URL: str = "http://localhost:5173"
+    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     @property
     def DATABASE_URL_asycopg(self):

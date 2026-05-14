@@ -3,7 +3,7 @@
 import { Equipment } from '@/shared/types';
 import { SelectItem } from '@/shared/types/select-item';
 import { createEvent, createStore, createEffect } from 'effector';
-import axios from 'axios';
+import { apiClient } from '@/shared/auth';
 
 // События
 export const addEquipment = createEvent<Equipment>();
@@ -13,21 +13,17 @@ export const updateEquipment = createEvent<Equipment>();
 
 // Эффекты
 export const fetchEquipmentFx = createEffect(async () => {
-    const response = await axios.get('http://localhost:8000/search');
+    const response = await apiClient.get('/search');
     return response.data.devices;
 });
 
 export const fetchCategoriesFx = createEffect(async () => {
-    const response = await axios.get('http://localhost:8000/categories');
+    const response = await apiClient.get('/categories');
     return response.data;
 });
 
 export const updateEquipmentFx = createEffect(async (equipment: Equipment) => {
-    console.log("updateEquipmentFx: Received equipment:", equipment);
-    console.log("updateEquipmentFx: Equipment ID:", equipment.id);
-    console.log("updateEquipmentFx: Making PUT request to:", `http://localhost:8000/update_device/${equipment.id}`);
-    
-    const response = await axios.put(`http://localhost:8000/update_device/${equipment.id}`, equipment);
+    const response = await apiClient.put(`/update_device/${equipment.id}`, equipment);
     return response.data.device;
 });
 

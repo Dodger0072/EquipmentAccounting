@@ -98,12 +98,12 @@ const Wrapper = styled('div', {
 const ToggleButton = styled('button', {
   display: 'flex',
   alignItems: 'center',
-  gap: '6px',
-  padding: '8px 12px',
+  gap: '8px',
+  padding: '10px 14px',
   backgroundColor: '#f8fafc',
   border: '1px solid #e2e8f0',
   borderRadius: '8px',
-  fontSize: '13px',
+  fontSize: '15px',
   fontWeight: '500',
   color: '#475569',
   cursor: 'pointer',
@@ -116,13 +116,13 @@ const ToggleButton = styled('button', {
   },
 
   '& svg': {
-    width: '16px',
-    height: '16px',
+    width: '18px',
+    height: '18px',
   },
 });
 
 const Arrow = styled('span', {
-  fontSize: '12px',
+  fontSize: '14px',
   transition: 'transform 0.2s ease',
 });
 
@@ -145,10 +145,10 @@ const DropdownItem = styled('button', {
   alignItems: 'center',
   gap: '10px',
   width: '100%',
-  padding: '10px 14px',
+  padding: '12px 14px',
   backgroundColor: 'transparent',
   border: 'none',
-  fontSize: '13px',
+  fontSize: '15px',
   color: '#374151',
   cursor: 'pointer',
   transition: 'background-color 0.15s ease',
@@ -159,8 +159,8 @@ const DropdownItem = styled('button', {
   },
 
   '& svg': {
-    width: '16px',
-    height: '16px',
+    width: '18px',
+    height: '18px',
     color: '#6b7280',
     flexShrink: 0,
   },

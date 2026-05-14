@@ -1,0 +1,55 @@
+<mxfile host="app.diagrams.net" modified="2026-04-20T12:00:00.000Z" agent="Cursor" version="24.7.17">
+  <diagram id="db-schema-current" name="Current DB Schema">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="Текущая схема БД" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="300" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="category" value="&lt;b&gt;category&lt;/b&gt;&#xa;---&#xa;PK id&#xa;name&#xa;description&#xa;icon" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="250" height="170" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="manufacturer" value="&lt;b&gt;manufacturer&lt;/b&gt;&#xa;---&#xa;PK id&#xa;name&#xa;description&#xa;FK category_id" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="320" width="250" height="170" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="device" value="&lt;b&gt;device&lt;/b&gt;&#xa;---&#xa;PK id&#xa;name&#xa;category&#xa;place_id&#xa;version&#xa;releaseDate&#xa;softwareStartDate&#xa;softwareEndDate&#xa;updateDate&#xa;manufacturer&#xa;xCord&#xa;yCord&#xa;mapId" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="390" y="200" width="280" height="380" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="places" value="&lt;b&gt;places&lt;/b&gt;&#xa;---&#xa;PK id&#xa;name" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="800" y="380" width="220" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="classrooms" value="&lt;b&gt;classrooms&lt;/b&gt;&#xa;---&#xa;PK id&#xa;name&#xa;FK map_id&#xa;polygon_coordinates&#xa;description" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="800" y="80" width="240" height="190" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="snmp" value="&lt;b&gt;device_snmp_config&lt;/b&gt;&#xa;---&#xa;PK id&#xa;FK device_id&#xa;enabled&#xa;ip_address&#xa;port&#xa;community&#xa;version&#xa;username&#xa;password&#xa;auth_protocol&#xa;priv_protocol&#xa;last_check&#xa;status&#xa;response_time&#xa;timeout&#xa;retries&#xa;check_interval" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="390" y="620" width="300" height="420" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="r1" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=0;strokeWidth=2;" edge="1" parent="1" source="category" target="manufacturer">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="r2" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=0;strokeWidth=2;" edge="1" parent="1" source="places" target="classrooms">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="r3" value="1:1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=0;strokeWidth=2;" edge="1" parent="1" source="device" target="snmp">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="note" value="Связи с кратностями:&#xa;category.id → manufacturer.category_id (1:N)&#xa;places.id → classrooms.map_id (1:N)&#xa;device.id → device_snmp_config.device_id (1:1)&#xa;&#xa;Поля device.category, device.place_id, device.manufacturer — обычные поля, не FK." style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=8;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="80" width="420" height="210" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useUnit } from 'effector-react';
 import { Text } from '@consta/uikit/Text';
 import { Button } from '@consta/uikit/Button';
 import { styled } from '@stitches/react';
 import { getEquipmentById } from '@/app/api';
 import { Equipment } from '@/shared/types/equipment';
 import { getType } from '@/shared/lib/get-type';
+import { $role } from '@/shared/auth';
 
 export const EquipmentViewPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const role = useUnit($role);
   const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,6 +184,17 @@ export const EquipmentViewPage = () => {
               {type === 'normal' && '✓ В норме'}
             </Text>
           </StatusBadge>
+
+          {role === 'student' && (
+            <ReportButton>
+              <Button
+                label="Сообщить о неисправности"
+                size="m"
+                view="primary"
+                onClick={() => navigate(`/tickets/new/${id}`)}
+              />
+            </ReportButton>
+          )}
         </Card>
       </Content>
     </Container>
@@ -303,6 +317,12 @@ const InfoLabel = styled(Text, {
 
 const InfoValue = styled(Text, {
   color: '#111827',
+});
+
+const ReportButton = styled('div', {
+  marginTop: '20px',
+  display: 'flex',
+  justifyContent: 'flex-end',
 });
 
 const StatusBadge = styled('div', {

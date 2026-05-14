@@ -6,7 +6,7 @@ import { $items, fetchEquipmentFx, deleteEquipment, updateEquipmentFx, addEquipm
 import { Filter } from './filter';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Types, getType } from '@/shared/lib/get-type';
-import axios from 'axios';
+import { apiClient, $role } from '@/shared/auth';
 import { Equipment as EquipmentType, EquipmentFormData } from '@/shared/types';
 import { AddEquipmentPopup } from './euipment-popup';
 import { EditEquipmentPopup } from './edit-equipment-popup';
@@ -17,6 +17,7 @@ import { NetworkDiscoveryPopup } from './network-discovery-popup';
 
 export const EquipmentList: React.FC = () => {
     const equipmentList = useUnit($items);
+    const role = useUnit($role);
     const [searchTerm, setSearchTerm] = useState<string>('');
     const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
     const [selectedEquipmentCategory, setSelectedEquipmentCategory] = useState<string | null>(null);
@@ -35,6 +36,8 @@ export const EquipmentList: React.FC = () => {
         setVisibleColumns(cols);
         saveVisibleColumns(cols);
     }, []);
+
+    const effectiveColumns = role === 'student' ? visibleColumns.filter(c => c !== 'actions') : visibleColumns;
 
     useEffect(() => {
         console.log('EquipmentList: equipmentList updated:', equipmentList);
@@ -127,7 +130,7 @@ export const EquipmentList: React.FC = () => {
         if (!window.confirm('Вы уверены, что хотите удалить это оборудование?')) return;
 
         try {
-            await axios.delete(`http://localhost:8000/delete_device/${id}`);
+            await apiClient.delete(`/delete_device/${id}`);
             deleteEquipment(id);
             alert('Оборудование удалено');
         } catch (error) {
@@ -176,7 +179,7 @@ export const EquipmentList: React.FC = () => {
 
         try {
             console.log("EquipmentList: handleAddEquipment - Sending POST request with data:", numericData);
-            const response = await axios.post<{ id: number, device: any }>('http://localhost:8000/add_device', numericData);
+            const response = await apiClient.post<{ id: number, device: any }>('/add_device', numericData);
             console.log("EquipmentList: handleAddEquipment - POST request successful.");
             
             const newEquipment = response.data.device;
@@ -300,7 +303,7 @@ export const EquipmentList: React.FC = () => {
                 onColumnsChange={handleColumnsChange}
             />
             <TableScroll>
-            <Header visibleColumns={visibleColumns} />
+            <Header visibleColumns={effectiveColumns} />
             {filteredEquipment.map((equipment, index) => {
                 let finalSnmpStatus = null;
                 
@@ -335,7 +338,7 @@ export const EquipmentList: React.FC = () => {
                         displayNumber={index + 1}
                         onDelete={() => handleDeleteEquipment(equipment.id)}
                         onEdit={() => handleEditEquipment(equipment)}
-                        visibleColumns={visibleColumns}
+                        visibleColumns={effectiveColumns}
                     />
                 );
             })}
